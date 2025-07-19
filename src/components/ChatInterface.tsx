@@ -108,18 +108,22 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       return;
     }
 
-    console.log('handleSendMessage called with:', { content, imagesCount: images?.length || 0, tools });
+    console.log('ChatInterface: handleSendMessage called with:', { 
+      content, 
+      imagesCount: images?.length || 0, 
+      tools 
+    });
 
     let processedImages: ImageUpload[] = [];
     
     // Process images if provided
     if (images && images.length > 0) {
-      console.log('Processing images...');
+      console.log('ChatInterface: Processing images...');
       try {
         processedImages = await ImageService.processImageFiles(images, user.uid);
-        console.log('All images processed successfully:', processedImages.length);
+        console.log('ChatInterface: All images processed successfully:', processedImages.length);
       } catch (error) {
-        console.error('Failed to process images:', error);
+        console.error('ChatInterface: Failed to process images:', error);
         toast({
           title: "Upload Failed",
           description: "Failed to upload images. Please try again.",
@@ -139,7 +143,12 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       tools
     };
     
-    console.log('Adding user message to chat:', userMessage);
+    console.log('ChatInterface: Adding user message to chat:', {
+      id: userMessage.id,
+      hasImages: !!userMessage.images,
+      imageCount: userMessage.images?.length || 0
+    });
+    
     setMessages(prev => [...prev, userMessage]);
 
     const isImageGeneration = tools?.includes('Generate Image') || detectImageGeneration(content);
@@ -150,10 +159,13 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     setAbortController(controller);
 
     if (isImageGeneration) {
+      console.log('ChatInterface: Handling image generation');
       await handleImageGeneration(content, controller);
     } else if (isImageEditing && processedImages.length > 0) {
+      console.log('ChatInterface: Handling image editing');
       await handleImageEditingRequest(content, processedImages[0].url, controller);
     } else {
+      console.log('ChatInterface: Handling regular chat with images:', processedImages.length);
       // Create assistant message for regular chat
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -164,7 +176,6 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
         isTyping: true
       };
       
-      console.log('Adding assistant message for regular chat');
       setMessages(prev => [...prev, assistantMessage]);
 
       // Generate AI response with image URLs
@@ -204,7 +215,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      console.log('Generating image with prompt:', prompt);
+      console.log('ChatInterface: Generating image with prompt:', prompt);
       const imageUrl = await generateImage(prompt, 'flux-1.1-pro');
       if (controller.signal.aborted) return;
 
@@ -216,9 +227,9 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
           const file = new File([blob], `generated-${Date.now()}.png`, { type: 'image/png' });
           const processedImages = await ImageService.processImageFiles([file], user.uid);
           finalImageUrl = processedImages[0].url;
-          console.log('Generated image uploaded:', finalImageUrl);
+          console.log('ChatInterface: Generated image uploaded:', finalImageUrl);
         } catch (uploadError) {
-          console.error('Failed to upload generated image:', uploadError);
+          console.error('ChatInterface: Failed to upload generated image:', uploadError);
         }
       }
 
@@ -231,7 +242,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       } : msg));
     } catch (error) {
       if (controller.signal.aborted) return;
-      console.error('Error generating image:', error);
+      console.error('ChatInterface: Error generating image:', error);
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
         ...msg,
         content: "I'm sorry, I couldn't generate the image. Please try again with a different prompt.",
@@ -268,7 +279,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
         const processedImages = await ImageService.processImageFiles([file], user.uid);
         finalImageUrl = processedImages[0].url;
       } catch (uploadError) {
-        console.error('Failed to upload edited image:', uploadError);
+        console.error('ChatInterface: Failed to upload edited image:', uploadError);
       }
 
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
@@ -280,7 +291,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       } : msg));
     } catch (error) {
       if (controller.signal.aborted) return;
-      console.error('Error editing image:', error);
+      console.error('ChatInterface: Error editing image:', error);
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
         ...msg,
         content: "I'm sorry, I couldn't edit the image. Please try again with a different prompt.",
@@ -300,7 +311,12 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     imageUrls: string[] = []
   ) => {
     try {
-      console.log('generateAIResponse called with images:', imageUrls.length);
+      console.log('ChatInterface: generateAIResponse called with:', {
+        messageId,
+        modelId,
+        imageCount: imageUrls.length,
+        imageUrls: imageUrls.slice(0, 2) // Log first 2 URLs for debugging
+      });
       
       // Build conversation history for context
       const conversationHistory = messages
@@ -313,7 +329,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       // Add current user message
       conversationHistory.push({ role: 'user' as const, content: userInput });
       
-      console.log('Starting AI response stream with images:', imageUrls.length);
+      console.log('ChatInterface: Starting AI response stream with images:', imageUrls.length);
       const stream = generateAIResponseStream(conversationHistory, modelId, webMode, imageUrls);
       let fullResponse = '';
 
@@ -328,7 +344,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
         await new Promise(resolve => setTimeout(resolve, 30));
       }
 
-      console.log('AI response completed');
+      console.log('ChatInterface: AI response completed');
       setMessages(prev => prev.map(msg => msg.id === messageId ? {
         ...msg,
         isTyping: false
@@ -336,7 +352,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       
     } catch (error) {
       if (controller.signal.aborted) return;
-      console.error('Error generating AI response:', error);
+      console.error('ChatInterface: Error generating AI response:', error);
       setMessages(prev => prev.map(msg => msg.id === messageId ? {
         ...msg,
         content: "I'm sorry, I'm experiencing technical difficulties. Please try again.",

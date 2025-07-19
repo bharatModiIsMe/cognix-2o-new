@@ -1,3 +1,4 @@
+
 import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
 
@@ -20,39 +21,39 @@ export interface AIModel {
 
 export const AI_MODELS: AIModel[] = [
   {
-    id: "gemini-2.5-flash-thinking",
-    name: "Gemini 2.5 Flash Thinking",
+    id: "gemini-2.5-pro",
+    name: "Gemini 2.5 Pro",
     apiModel: "provider-6/gemini-2.5-flash-thinking",
-    description: "Google's most capable model with thinking",
-    badge: "Multimodal"
+    description: "Google's most advanced model with thinking capabilities",
+    badge: "Pro"
   },
   {
-    id: "deepseek-v3-0324",
+    id: "cognix-2o-web",
+    name: "Cognix-2o Web",
+    apiModel: "provider-6/gpt-4o-mini-search-preview",
+    description: "Web-enabled AI with real-time search capabilities",
+    badge: "Web"
+  },
+  {
+    id: "deepseek-v3",
     name: "DeepSeek V3",
     apiModel: "provider-3/deepseek-v3-0324",
-    description: "Advanced reasoning capabilities",
+    description: "Advanced reasoning and coding capabilities",
     badge: "Reasoning"
   },
   {
-    id: "grok-4-0709",
-    name: "Grok-4",
-    apiModel: "provider-3/grok-4-0709",
-    description: "Real-time information access",
-    badge: "Real-time"
+    id: "claude-sonnet-4",
+    name: "Claude Sonnet 4",
+    apiModel: "provider-1/claude-sonnet-4",
+    description: "Anthropic's balanced model for various tasks",
+    badge: "Balanced"
   },
   {
-    id: "qwen-2.5-vl-72b",
-    name: "Qwen AI",
-    apiModel: "provider-5/Qwen/Qwen2.5-VL-72B-Instruct",
-    description: "Multilingual AI assistant",
-    badge: "Multilingual"
-  },
-  {
-    id: "gpt-4.1-nano",
-    name: "GPT-4.1 Nano",
-    apiModel: "provider-3/gpt-4.1-nano",
-    description: "OpenAI's compact model",
-    badge: "Fast"
+    id: "claude-opus-4",
+    name: "Claude Opus 4",
+    apiModel: "provider-1/claude-opus-4",
+    description: "Anthropic's most capable model",
+    badge: "Ultimate"
   }
 ];
 
@@ -84,41 +85,6 @@ export const IMAGE_MODELS: AIModel[] = [
     apiModel: "provider-1/FLUX.1-schnell",
     description: "Quick image generation",
     badge: "Quick"
-  },
-  {
-    id: "flux-1-schnell-v2",
-    name: "Flux.1-schnell-v2",
-    apiModel: "provider-2/FLUX.1-schnell-v2",
-    description: "Enhanced quick generation",
-    badge: "Enhanced"
-  },
-  {
-    id: "imagen-4",
-    name: "Imagen-4",
-    apiModel: "provider-4/imagen-4",
-    description: "Google's latest image model",
-    badge: "Latest"
-  },
-  {
-    id: "imagen-3",
-    name: "Imagen-3",
-    apiModel: "provider-4/imagen-3",
-    description: "Google's image model",
-    badge: "Reliable"
-  },
-  {
-    id: "flux-1-dev",
-    name: "Flux.1-dev",
-    apiModel: "provider-3/FLUX.1-dev",
-    description: "Development image model",
-    badge: "Dev"
-  },
-  {
-    id: "flux-kontext-pro",
-    name: "Flux-Kontext-Pro",
-    apiModel: "provider-1/FLUX.1-kontext-pro",
-    description: "Context-aware generation",
-    badge: "Pro"
   }
 ];
 
@@ -184,7 +150,6 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    // Use the A4F images endpoint instead of chat completions
     const response = await fetch(`${a4fBaseUrl}/images/generations`, {
       method: 'POST',
       headers: {
@@ -208,19 +173,16 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
     const data = await response.json();
     console.log('Image generation response:', data);
 
-    // Check for image URL in response
     if (data.data && data.data[0] && data.data[0].url) {
       console.log('Found image URL:', data.data[0].url);
       return data.data[0].url;
     }
 
-    // Check for b64_json format
     if (data.data && data.data[0] && data.data[0].b64_json) {
       console.log('Found base64 image');
       return `data:image/png;base64,${data.data[0].b64_json}`;
     }
 
-    // If no proper image data found, log the response structure
     console.log('Unexpected response structure:', JSON.stringify(data, null, 2));
     throw new Error('No image data found in response');
     
@@ -270,16 +232,12 @@ export async function* generateAIResponseStream(
       }
     }
 
-    // Enhanced system prompt with function calling support
+    // Enhanced system prompt
     const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities.
 
 IMPORTANT: You have access to real-time information through web search results when provided. NEVER say "I don't have real-time access" or "I can't provide current information" - you can and do have access through search results.
 
 ${isWebSearchTriggered ? '🌐 **Web search was performed** - Use the provided search results to give accurate, current information. Present it naturally as if you knew it directly.' : ''}
-
-For models that support function calling (GPT-4.1, Grok-4, Gemini-2.5-Flash):
-Available functions:
-- googleSearch(query: string): Search the web for real-time information
 
 Format your responses using markdown:
 - Use **bold** for important terms and emphasis
@@ -291,9 +249,6 @@ Format your responses using markdown:
 
 Always provide well-structured, formatted responses that are easy to read and understand.`;
 
-    // For models that support function calling, add function definitions
-    const supportsFunction = ['gemini-2.5-flash', 'gpt-4.1-nano', 'grok-4-0709'].includes(modelId);
-    
     const requestBody: any = {
       model: model.apiModel,
       messages: [
@@ -302,27 +257,6 @@ Always provide well-structured, formatted responses that are easy to read and un
       ],
       stream: true,
     };
-
-    // Add function calling for supported models
-    if (supportsFunction && !isWebSearchTriggered) {
-      requestBody.functions = [
-        {
-          name: 'googleSearch',
-          description: 'Search the web for real-time information, current events, prices, news, or any time-sensitive data',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description: 'The search query to find real-time information'
-              }
-            },
-            required: ['query']
-          }
-        }
-      ];
-      requestBody.function_call = 'auto';
-    }
 
     const response = await a4fClient.chat.completions.create(requestBody) as any;
 

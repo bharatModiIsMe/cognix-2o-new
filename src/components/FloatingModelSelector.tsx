@@ -1,14 +1,15 @@
+
 import { useState } from "react";
 import { ChevronDown, Sparkles, Brain, Zap, Globe, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AI_MODELS } from "@/services/aiService";
 
 const modelIcons = {
-  "gemini-2.5-flash": Sparkles,
+  "gemini-2.5-pro": Sparkles,
+  "cognix-2o-web": Globe,
   "deepseek-v3": Brain,
-  "grok-4-0709": Zap,
-  "qwen-2.5-vl-72b": Globe,
-  "gpt-4.1-mini": Bot,
+  "claude-sonnet-4": Zap,
+  "claude-opus-4": Bot,
 };
 
 interface FloatingModelSelectorProps {

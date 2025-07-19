@@ -1,8 +1,7 @@
+
 import { useState, useRef, useEffect } from "react";
 import { 
   Send, 
-  Mic, 
-  MicOff, 
   Image as ImageIcon, 
   X, 
   Settings,
@@ -10,15 +9,9 @@ import {
   PenTool,
   FileText,
   Globe,
-  Square,
-  Volume2,
-  VolumeX,
-  Waves,
-  Loader2
+  Square
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useVoiceMode } from "@/hooks/useVoiceMode";
-import { VoiceModePopover } from "@/components/VoiceModePopover";
 
 interface Tool {
   id: string;
@@ -42,33 +35,23 @@ interface ChatInputProps {
   onWebModeToggle?: (enabled: boolean) => void;
   isGenerating?: boolean;
   onStopGeneration?: () => void;
-  voiceModeEnabled?: boolean;
 }
 
-export function ChatInput({ onSendMessage, onNewChat, disabled, webMode = false, onWebModeToggle, isGenerating = false, onStopGeneration, voiceModeEnabled = false }: ChatInputProps) {
+export function ChatInput({ 
+  onSendMessage, 
+  onNewChat, 
+  disabled, 
+  webMode = false, 
+  onWebModeToggle, 
+  isGenerating = false, 
+  onStopGeneration 
+}: ChatInputProps) {
   const [input, setInput] = useState("");
   const [images, setImages] = useState<File[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // Voice mode hook
-  const { 
-    state: voiceState, 
-    toggleVoiceMode, 
-    toggleRecording,
-    stopSpeaking,
-    toggleMute
-  } = useVoiceMode();
-
-  // Handle voice recording results - no auto-send in unified mode
-  useEffect(() => {
-    if (voiceState.transcript) {
-      setInput(voiceState.transcript);
-      // In unified voice mode, we don't auto-send - the conversation is handled internally
-    }
-  }, [voiceState.transcript]);
 
   // Listen for custom event to set input value (from Ask Cognix)
   useEffect(() => {
@@ -112,17 +95,6 @@ export function ChatInput({ onSendMessage, onNewChat, disabled, webMode = false,
     }
   };
 
-  const handleVoiceRecording = async () => {
-    try {
-      const transcript = await toggleRecording();
-      if (transcript) {
-        await handleSendMessage(transcript);
-      }
-    } catch (error) {
-      console.error('Voice error:', error);
-    }
-  };
-
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
@@ -154,22 +126,13 @@ export function ChatInput({ onSendMessage, onNewChat, disabled, webMode = false,
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      {/* Voice Mode and Web Mode indicators */}
-      {(voiceState.isEnabled || webMode) && (
-        <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
-          {voiceState.isEnabled && (
-            <div className="flex items-center gap-2 text-primary">
-              <Volume2 className="h-3 w-3" />
-              <span className="font-medium">🎤 Voice Mode Active</span>
-              {voiceState.isMuted && <span className="text-muted-foreground">(Muted)</span>}
-            </div>
-          )}
-          {webMode && (
-            <div className="flex items-center gap-2 text-blue-500">
-              <Globe className="h-3 w-3" />
-              <span className="font-medium">🌐 Web Mode Enabled</span>
-            </div>
-          )}
+      {/* Web Mode indicator */}
+      {webMode && (
+        <div className="mb-2 flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-blue-500">
+            <Globe className="h-3 w-3" />
+            <span className="font-medium">🌐 Web Mode Enabled</span>
+          </div>
         </div>
       )}
       
@@ -301,20 +264,6 @@ export function ChatInput({ onSendMessage, onNewChat, disabled, webMode = false,
             <ImageIcon className="w-5 h-5 text-muted-foreground" />
           </button>
 
-          {/* Voice Mode Popover */}
-          {voiceModeEnabled && (
-            <VoiceModePopover
-              isRecording={voiceState.isRecording}
-              isProcessing={voiceState.isTranscribing}
-              isSpeaking={voiceState.isSpeaking}
-              isMuted={voiceState.isMuted}
-              onStartRecording={handleVoiceRecording}
-              onStopRecording={handleVoiceRecording}
-              onStopSpeaking={stopSpeaking}
-              onToggleMute={toggleMute}
-            />
-          )}
-
           {/* Send/Stop button */}
           <button
             onClick={isGenerating ? onStopGeneration : handleSubmit}
@@ -346,58 +295,6 @@ export function ChatInput({ onSendMessage, onNewChat, disabled, webMode = false,
           className="hidden"
         />
       </div>
-
-      {/* Voice status indicators */}
-      {voiceState.isEnabled && (
-        <div className="mt-2 flex flex-col items-center gap-2">
-          {voiceState.isRecording && (
-            <div className="flex items-center justify-center gap-2 text-sm text-destructive">
-              <div className="flex gap-1">
-                <div className="w-1 h-4 bg-destructive rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
-                <div className="w-1 h-3 bg-destructive rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
-                <div className="w-1 h-5 bg-destructive rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
-                <div className="w-1 h-2 bg-destructive rounded-full animate-pulse" style={{ animationDelay: '450ms' }} />
-              </div>
-              <span className="font-medium">🎤 Listening... (speak now)</span>
-            </div>
-          )}
-          
-          {voiceState.isTranscribing && (
-            <div className="flex items-center justify-center gap-2 text-sm text-orange-500">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="font-medium">🧠 Processing speech...</span>
-            </div>
-          )}
-          
-          {voiceState.isSpeaking && (
-            <div className="flex items-center justify-center gap-2 text-sm text-blue-500">
-              <Waves className="w-4 h-4" />
-              <span className="font-medium">🔊 AI is speaking...</span>
-            </div>
-          )}
-          
-          {!voiceState.isRecording && !voiceState.isTranscribing && !voiceState.isSpeaking && (
-            <div className="flex items-center justify-center gap-2 text-sm text-primary">
-              <Mic className="w-4 h-4" />
-              <span className="font-medium">🎙️ Voice mode active - click mic to record</span>
-            </div>
-          )}
-          
-          {voiceState.error && (
-            <div className="text-xs text-destructive bg-destructive/10 px-3 py-1 rounded-full">
-              ❌ {voiceState.error}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
-}
-
-// Clean up any unused interfaces - voice mode now uses OpenAI Whisper
-declare global {
-  interface Window {
-    SpeechRecognition: any;
-    webkitSpeechRecognition: any;
-  }
 }

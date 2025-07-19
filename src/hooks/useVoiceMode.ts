@@ -10,7 +10,11 @@ export interface VoiceModeState {
   currentStatus: string;
 }
 
-export function useVoiceMode() {
+interface UseVoiceModeProps {
+  onMessage?: (content: string, isUser: boolean) => void;
+}
+
+export function useVoiceMode({ onMessage }: UseVoiceModeProps = {}) {
   const [state, setState] = useState<VoiceModeState>({
     isRecording: false,
     isProcessing: false,
@@ -78,9 +82,19 @@ export function useVoiceMode() {
         return;
       }
 
+      // Add user message to chat
+      if (onMessage) {
+        onMessage(transcribedText, true);
+      }
+
       // Process with AI
       updateState({ currentStatus: 'Getting AI response...' });
       const aiResponse = await processVoiceMessage(transcribedText);
+
+      // Add AI message to chat
+      if (onMessage) {
+        onMessage(aiResponse, false);
+      }
 
       // Synthesize speech
       updateState({ currentStatus: 'Converting text to speech...' });
@@ -109,7 +123,7 @@ export function useVoiceMode() {
         currentStatus: 'Error'
       });
     }
-  }, []);
+  }, [onMessage]);
 
   const stopAudio = useCallback(() => {
     if (playerRef.current) {
@@ -130,7 +144,7 @@ export function useVoiceMode() {
   }, [state.isRecording, startRecording, stopRecording]);
 
   const clearError = useCallback(() => {
-    updateState({ error: null });
+    updateState({ error: null, currentStatus: 'Ready' });
   }, []);
 
   return {

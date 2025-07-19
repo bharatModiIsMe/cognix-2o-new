@@ -1,4 +1,3 @@
-
 import { useEffect } from "react";
 import { Mic, MicOff, Square, AlertCircle } from "lucide-react";
 import {
@@ -12,6 +11,7 @@ import { useVoiceMode } from "@/hooks/useVoiceMode";
 interface VoiceModeDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  onVoiceMessage?: (content: string, isUser: boolean) => void;
 }
 
 // Animated dots component
@@ -44,8 +44,10 @@ function AnimatedDots() {
   );
 }
 
-export function VoiceModeDialog({ isOpen, onOpenChange }: VoiceModeDialogProps) {
-  const { state, toggleRecording, stopAudio, clearError, isActive } = useVoiceMode();
+export function VoiceModeDialog({ isOpen, onOpenChange, onVoiceMessage }: VoiceModeDialogProps) {
+  const { state, toggleRecording, stopAudio, clearError, isActive } = useVoiceMode({
+    onMessage: onVoiceMessage
+  });
 
   // Clear error when dialog opens
   useEffect(() => {

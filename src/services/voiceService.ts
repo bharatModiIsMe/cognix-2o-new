@@ -158,7 +158,6 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
     const response = await a4fClient.audio.transcriptions.create({
       file: audioFile,
       model: 'provider-2/whisper-1',
-      language: 'en', // Auto-detect or specify language
     });
 
     console.log('Transcription result:', response.text);

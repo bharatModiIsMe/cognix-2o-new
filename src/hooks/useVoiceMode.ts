@@ -105,7 +105,7 @@ export function useVoiceMode() {
         currentStatus: 'Listening... Speak now!' 
       });
 
-      // Safety timeout
+      // Safety timeout - 30 seconds max
       timeoutRef.current = setTimeout(() => {
         console.log('⏰ Recording timeout reached');
         if (!isProcessingRef.current && isMountedRef.current) {
@@ -162,8 +162,9 @@ export function useVoiceMode() {
         return;
       }
 
-      // Transcribe audio
+      // Step 1: Transcribe audio
       updateState({ currentStatus: 'Converting speech to text...' });
+      console.log('🎯 Starting transcription...');
       const transcribedText = await transcribeAudio(audioBlob);
       
       if (!isMountedRef.current) return;
@@ -180,8 +181,9 @@ export function useVoiceMode() {
 
       console.log('👤 User said:', transcribedText);
 
-      // Process with AI
+      // Step 2: Process with AI
       updateState({ currentStatus: 'Getting AI response...' });
+      console.log('🤖 Processing with AI...');
       const aiResponse = await processVoiceMessage(transcribedText);
 
       if (!isMountedRef.current) return;
@@ -198,21 +200,25 @@ export function useVoiceMode() {
 
       console.log('🤖 AI responded:', aiResponse);
 
-      // Synthesize speech
+      // Step 3: Synthesize speech
       updateState({ currentStatus: 'Converting AI response to speech...' });
+      console.log('🗣️ Starting speech synthesis...');
       const audioBuffer = await synthesizeSpeech(aiResponse);
 
       if (!isMountedRef.current) return;
 
-      // Play response
+      // Step 4: Play response
       updateState({ 
         isProcessing: false, 
         isPlaying: true,
         currentStatus: 'AI is speaking...' 
       });
 
+      console.log('🔊 Starting audio playback...');
       playerRef.current = new AudioPlayer();
+      
       await playerRef.current.playAudio(audioBuffer, () => {
+        console.log('🏁 Audio playback completed');
         if (isMountedRef.current) {
           updateState({ 
             isPlaying: false,
@@ -224,13 +230,13 @@ export function useVoiceMode() {
       });
 
     } catch (error) {
-      console.error('Error in voice processing pipeline:', error);
+      console.error('❌ Error in voice processing pipeline:', error);
       cleanup();
       if (isMountedRef.current) {
         updateState({ 
           isProcessing: false,
           isPlaying: false,
-          error: error instanceof Error ? error.message : 'Voice processing failed',
+          error: `Voice processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
           currentStatus: 'Error - Tap to try again'
         });
       }
@@ -256,10 +262,18 @@ export function useVoiceMode() {
   const toggleRecording = useCallback(() => {
     if (!isMountedRef.current) return;
     
+    console.log('🔄 Toggle recording - current state:', { 
+      isRecording: state.isRecording, 
+      isProcessing: state.isProcessing, 
+      isPlaying: state.isPlaying 
+    });
+    
     if (state.isRecording) {
       stopRecording();
     } else if (!state.isProcessing && !state.isPlaying && !isProcessingRef.current) {
       startRecording();
+    } else {
+      console.log('⚠️ Cannot toggle - busy state');
     }
   }, [state.isRecording, state.isProcessing, state.isPlaying, startRecording, stopRecording]);
 

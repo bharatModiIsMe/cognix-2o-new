@@ -18,28 +18,36 @@ export class VoiceRecorder {
       this.onSilenceCallback = onSilence;
       this.recordingStartTime = Date.now();
       
-      // Request high-quality audio
+      // Request high-quality audio with better constraints
       this.stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          sampleRate: 44100,
+          autoGainControl: true,
+          sampleRate: { ideal: 48000, min: 16000 },
           channelCount: 1
         } 
       });
       
-      // Use the best available format
+      console.log('🎵 Audio stream obtained');
+      
+      // Determine best available format
       let mimeType = 'audio/webm;codecs=opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = 'audio/webm';
         if (!MediaRecorder.isTypeSupported(mimeType)) {
           mimeType = 'audio/mp4';
+          if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = 'audio/wav';
+          }
         }
       }
+      
+      console.log('🎼 Using MIME type:', mimeType);
         
       this.mediaRecorder = new MediaRecorder(this.stream, { 
         mimeType,
-        audioBitsPerSecond: 128000 // Higher quality
+        audioBitsPerSecond: 128000
       });
       
       this.audioChunks = [];
@@ -54,10 +62,11 @@ export class VoiceRecorder {
       this.mediaRecorder.onerror = (event) => {
         console.error('❌ MediaRecorder error:', event);
         this.cleanup();
+        throw new Error('Recording failed');
       };
 
       this.mediaRecorder.onstart = () => {
-        console.log('✅ Recording started');
+        console.log('✅ Recording started successfully');
         this.isRecording = true;
       };
 
@@ -66,16 +75,23 @@ export class VoiceRecorder {
         this.isRecording = false;
       };
 
-      // Setup silence detection
+      // Setup improved silence detection
       this.setupSilenceDetection();
       
-      // Start recording with smaller intervals for better responsiveness
-      this.mediaRecorder.start(100);
+      // Start recording with frequent data collection
+      this.mediaRecorder.start(250); // Collect data every 250ms
       
     } catch (error) {
       console.error('❌ Error starting recording:', error);
       this.cleanup();
-      throw new Error('Failed to start recording. Please check microphone permissions.');
+      
+      if (error instanceof Error && error.name === 'NotAllowedError') {
+        throw new Error('Microphone permission denied. Please allow microphone access and try again.');
+      } else if (error instanceof Error && error.name === 'NotFoundError') {
+        throw new Error('No microphone found. Please connect a microphone and try again.');
+      }
+      
+      throw new Error('Failed to start recording. Please check your microphone and try again.');
     }
   }
 
@@ -93,8 +109,8 @@ export class VoiceRecorder {
       const bufferLength = this.analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
       let silentFrames = 0;
-      const maxSilentFrames = 30; // 3 seconds at 100ms intervals
-      const minRecordingTime = 1000; // Minimum 1 second recording
+      const maxSilentFrames = 25; // 2.5 seconds at 100ms intervals
+      const minRecordingTime = 1500; // Minimum 1.5 second recording
 
       const checkAudioLevel = () => {
         if (!this.isRecording || !this.analyser) return;
@@ -102,17 +118,17 @@ export class VoiceRecorder {
         this.analyser.getByteFrequencyData(dataArray);
         const average = dataArray.reduce((a, b) => a + b) / bufferLength;
         
-        const silenceThreshold = 10;
+        // Dynamic silence threshold based on initial audio levels
+        const silenceThreshold = Math.max(8, average * 0.1);
         const recordingDuration = Date.now() - this.recordingStartTime;
         
         if (average < silenceThreshold) {
           silentFrames++;
-          // Only trigger silence detection after minimum recording time
           if (silentFrames >= maxSilentFrames && 
               recordingDuration > minRecordingTime && 
               this.onSilenceCallback && 
               this.isRecording) {
-            console.log('🔇 Silence detected after', recordingDuration, 'ms');
+            console.log('🔇 Silence detected after', recordingDuration, 'ms, average level:', average);
             this.onSilenceCallback();
             return;
           }
@@ -122,6 +138,7 @@ export class VoiceRecorder {
       };
 
       this.silenceCheckInterval = setInterval(checkAudioLevel, 100);
+      console.log('🔍 Silence detection setup complete');
       
     } catch (error) {
       console.error('❌ Error setting up silence detection:', error);
@@ -131,16 +148,16 @@ export class VoiceRecorder {
   async stopRecording(): Promise<Blob> {
     return new Promise((resolve, reject) => {
       if (!this.mediaRecorder || !this.isRecording) {
-        reject(new Error('No active recording'));
+        reject(new Error('No active recording to stop'));
         return;
       }
 
-      console.log('⏹️ Stopping recording...');
+      console.log('⏹️ Stopping recording process...');
 
       const handleStop = () => {
         try {
           if (this.audioChunks.length === 0) {
-            reject(new Error('No audio data recorded'));
+            reject(new Error('No audio data was recorded'));
             return;
           }
 
@@ -148,11 +165,12 @@ export class VoiceRecorder {
             type: this.mediaRecorder?.mimeType || 'audio/webm' 
           });
           
+          const duration = Date.now() - this.recordingStartTime;
           console.log('📼 Audio blob created:', {
             size: audioBlob.size,
             type: audioBlob.type,
             chunks: this.audioChunks.length,
-            duration: Date.now() - this.recordingStartTime
+            duration: duration + 'ms'
           });
           
           this.cleanup();
@@ -165,10 +183,16 @@ export class VoiceRecorder {
 
       this.mediaRecorder.onstop = handleStop;
       
-      if (this.mediaRecorder.state === 'recording') {
-        this.mediaRecorder.stop();
-      } else {
-        handleStop();
+      try {
+        if (this.mediaRecorder.state === 'recording') {
+          this.mediaRecorder.stop();
+        } else {
+          console.log('📝 MediaRecorder not in recording state:', this.mediaRecorder.state);
+          handleStop();
+        }
+      } catch (error) {
+        console.error('❌ Error stopping MediaRecorder:', error);
+        reject(error);
       }
     });
   }
@@ -205,6 +229,7 @@ export class VoiceRecorder {
     this.analyser = null;
     this.isRecording = false;
     this.onSilenceCallback = undefined;
+    this.audioChunks = [];
   }
 
   getIsRecording(): boolean {
@@ -220,52 +245,70 @@ export class AudioPlayer {
 
   async playAudio(audioBuffer: ArrayBuffer, onEnd?: () => void): Promise<void> {
     try {
-      console.log('▶️ Starting audio playback...');
+      console.log('▶️ Starting audio playback...', audioBuffer.byteLength, 'bytes');
       
+      // Stop any existing playback
       this.stopAudio();
 
+      // Create audio context
       this.audioContext = new (AudioContext || (window as any).webkitAudioContext)();
       
+      // Resume context if suspended
       if (this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
+        console.log('🔊 Audio context resumed');
       }
       
+      // Create gain node for volume control
       this.gainNode = this.audioContext.createGain();
       this.gainNode.connect(this.audioContext.destination);
 
+      // Decode audio data
+      console.log('🎵 Decoding audio data...');
       const buffer = await this.audioContext.decodeAudioData(audioBuffer.slice(0));
+      console.log('✅ Audio decoded successfully, duration:', buffer.duration, 'seconds');
+      
+      // Create buffer source
       this.currentSource = this.audioContext.createBufferSource();
       this.currentSource.buffer = buffer;
       this.currentSource.connect(this.gainNode);
 
-      // Smooth audio start
+      // Smooth fade-in
       this.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-      this.gainNode.gain.linearRampToValueAtTime(1, this.audioContext.currentTime + 0.1);
+      this.gainNode.gain.linearRampToValueAtTime(1, this.audioContext.currentTime + 0.05);
 
+      // Handle playback end
       this.currentSource.onended = () => {
-        console.log('🏁 Audio playback completed');
+        console.log('🏁 Audio playback completed naturally');
         this.isPlaying = false;
-        if (onEnd) onEnd();
+        if (onEnd) {
+          setTimeout(onEnd, 100); // Small delay to ensure cleanup
+        }
       };
 
-      this.currentSource.start();
+      // Start playback
+      this.currentSource.start(0);
       this.isPlaying = true;
       
-      console.log('🎵 Audio playback started');
+      console.log('🎵 Audio playback started successfully');
     } catch (error) {
       console.error('❌ Audio playback error:', error);
       this.isPlaying = false;
-      throw new Error('Failed to play audio response.');
+      this.cleanup();
+      throw new Error(`Failed to play audio: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   stopAudio(): void {
-    if (this.currentSource && this.isPlaying) {
-      console.log('⏹️ Stopping audio playback');
-      
-      try {
+    if (!this.isPlaying && !this.currentSource) return;
+    
+    console.log('⏹️ Stopping audio playback');
+    
+    try {
+      if (this.currentSource && this.isPlaying) {
+        // Smooth fade-out before stopping
         if (this.gainNode && this.audioContext) {
-          this.gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + 0.1);
+          this.gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + 0.05);
           setTimeout(() => {
             if (this.currentSource) {
               try {
@@ -273,24 +316,34 @@ export class AudioPlayer {
               } catch (e) {
                 console.warn('Warning stopping audio source:', e);
               }
-              this.currentSource = null;
             }
-          }, 100);
+            this.cleanup();
+          }, 60);
         } else {
           this.currentSource.stop();
-          this.currentSource = null;
+          this.cleanup();
         }
-      } catch (e) {
-        console.warn('Warning during audio cleanup:', e);
       }
       
       this.isPlaying = false;
+    } catch (error) {
+      console.warn('Warning during audio stop:', error);
+      this.cleanup();
     }
+  }
 
+  private cleanup(): void {
+    if (this.currentSource) {
+      this.currentSource = null;
+    }
+    
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close().catch(console.warn);
       this.audioContext = null;
     }
+    
+    this.gainNode = null;
+    this.isPlaying = false;
   }
 
   getIsPlaying(): boolean {

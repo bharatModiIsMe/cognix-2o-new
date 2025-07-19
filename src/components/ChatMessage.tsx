@@ -60,7 +60,6 @@ export function ChatMessage({
   const handleTextSelection = () => {
     const selection = window.getSelection();
     if (selection && selection.toString().trim()) {
-      // Could implement "Ask GPT" follow-up here
       console.log("Selected text:", selection.toString());
     }
   };
@@ -116,14 +115,22 @@ export function ChatMessage({
 
         {/* Images */}
         {message.images && message.images.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3 mb-3">
             {message.images.map((image, index) => (
-              <img
-                key={index}
-                src={image}
-                alt={`Uploaded image ${index + 1}`}
-                className="max-w-xs rounded-lg border border-border"
-              />
+              <div key={index} className="relative group">
+                <img
+                  src={image}
+                  alt={`${message.type === 'user' ? 'Uploaded' : 'Generated'} image ${index + 1}`}
+                  className="max-w-sm max-h-96 rounded-lg border border-border object-contain bg-surface"
+                  onError={(e) => {
+                    console.error('Image load error:', e);
+                    e.currentTarget.style.display = 'none';
+                  }}
+                  onLoad={() => {
+                    console.log('Image loaded successfully:', image);
+                  }}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -152,7 +159,6 @@ export function ChatMessage({
                 <ReactMarkdown 
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    // Customize styling for different elements
                     h1: ({ children }) => <h1 className="text-lg font-bold text-foreground mb-2">{children}</h1>,
                     h2: ({ children }) => <h2 className="text-base font-bold text-foreground mb-1">{children}</h2>,
                     h3: ({ children }) => <h3 className="text-sm font-bold text-foreground mb-1">{children}</h3>,
@@ -239,7 +245,6 @@ export function ChatMessage({
                   />
                   <div className="absolute bottom-full right-0 mb-2 bg-popover border border-border rounded-lg shadow-elevated z-20 p-2 min-w-[200px]">
                     <div className="space-y-1">
-                      {/* For image messages, only show regenerate with other models */}
                       {!message.tools?.includes('generate-image') && (
                         <button
                           onClick={() => {

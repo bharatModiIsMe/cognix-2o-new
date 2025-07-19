@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { 
   Send, 
@@ -72,7 +71,8 @@ export function ChatInput({
     if (!content.trim() && images.length === 0) return;
     
     try {
-      onSendMessage(content, images, selectedTools);
+      console.log('Sending message with images:', images.length);
+      onSendMessage(content, images.length > 0 ? images : undefined, selectedTools);
       
       setInput("");
       setImages([]);
@@ -98,6 +98,8 @@ export function ChatInput({
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    
+    console.log('Selected image files:', imageFiles.length);
     
     const newUrls = imageFiles.map(file => URL.createObjectURL(file));
     
@@ -188,6 +190,9 @@ export function ChatInput({
                         src={imageUrls[index]}
                         alt={`Upload ${index + 1}`}
                         className="w-16 h-16 object-cover rounded-lg border border-border"
+                        onError={(e) => {
+                          console.error('Image load error:', e);
+                        }}
                       />
                     </div>
                     

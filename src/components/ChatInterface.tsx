@@ -71,7 +71,8 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       id: Date.now().toString(),
       content: message.content,
       timestamp: new Date(),
-      model: message.model
+      model: message.model,
+      images: message.images
     };
 
     savedMessages.push(newSavedMessage);
@@ -106,11 +107,15 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       return;
     }
 
+    console.log('Handling send message with images:', images?.length || 0);
+
     let uploadedImageUrls: string[] = [];
     if (images && images.length > 0) {
       try {
+        console.log('Uploading images...');
         const uploadPromises = images.map(image => uploadFile(image, user.uid, 'chat-images'));
         uploadedImageUrls = await Promise.all(uploadPromises);
+        console.log('Images uploaded:', uploadedImageUrls);
       } catch (error) {
         console.error('Failed to upload images:', error);
         toast({
@@ -130,10 +135,12 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       images: uploadedImageUrls.length > 0 ? uploadedImageUrls : undefined,
       tools
     };
+    
+    console.log('Adding user message:', userMessage);
     setMessages(prev => [...prev, userMessage]);
 
     const isImageGeneration = tools?.includes('Generate Image') || detectImageGeneration(content);
-    const isImageEditing = detectImageEditing(content, uploadedImageUrls.length > 0);
+    const isImageEditing = detectImageEditing(content, (images?.length || 0) > 0);
     
     setIsGenerating(true);
     const controller = new AbortController();
@@ -141,8 +148,8 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
 
     if (isImageGeneration) {
       await handleImageGeneration(content, controller);
-    } else if (isImageEditing) {
-      await handleImageEditingRequest(content, images?.[0], controller);
+    } else if (isImageEditing && images && images.length > 0) {
+      await handleImageEditingRequest(content, images[0], controller);
     } else {
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -270,6 +277,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
 
   const generateRealAIResponse = async (messageId: string, userInput: string, modelId: string, controller: AbortController, images?: File[]) => {
     try {
+      console.log('Generating AI response with images:', images?.length || 0);
       const messages = [{ role: 'user' as const, content: userInput }];
       const stream = generateAIResponseStream(messages, modelId, webMode, false, images);
       let fullResponse = '';

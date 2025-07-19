@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { ChatInput } from "@/components/ChatInput";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ExportDialog } from "@/components/ExportDialog";
-import { FloatingModelSelector } from "@/components/FloatingModelSelector";
 import { AskCognixPopover } from "@/components/AskCognixPopover";
 import { generateAIResponseStream, generateImage, editImage, AI_MODELS, IMAGE_MODELS } from "@/services/aiService";
 import { saveChatHistory, uploadFile } from "@/services/databaseService";
@@ -22,34 +21,31 @@ export interface Message {
   disliked?: boolean;
 }
 
-export function ChatInterface() {
+interface ChatInterfaceProps {
+  selectedModel: string;
+  onModelChange: (modelId: string) => void;
+}
+
+export function ChatInterface({ selectedModel, onModelChange }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [selectedModel, setSelectedModel] = useState("gemini-2.5-pro");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [selectedText, setSelectedText] = useState("");
-  const [popoverPosition, setPopoverPosition] = useState({
-    x: 0,
-    y: 0
-  });
+  const [popoverPosition, setPopoverPosition] = useState({ x: 0, y: 0 });
   const [webMode, setWebMode] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [imageEditingFile, setImageEditingFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { toast } = useToast();
   
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth"
-    });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // Auto-save chat history when messages change
   useEffect(() => {
     if (messages.length > 0 && user) {
       const saveHistory = async () => {
@@ -61,22 +57,41 @@ export function ChatInterface() {
         }
       };
       
-      // Debounce saving
       const timeoutId = setTimeout(saveHistory, 2000);
       return () => clearTimeout(timeoutId);
     }
   }, [messages, user]);
 
-  // Smart image generation detection
+  const saveMessage = (messageId: string) => {
+    const message = messages.find(msg => msg.id === messageId);
+    if (!message || !user) return;
+
+    const savedMessages = JSON.parse(localStorage.getItem(`savedMessages_${user.uid}`) || '[]');
+    const newSavedMessage = {
+      id: Date.now().toString(),
+      content: message.content,
+      timestamp: new Date(),
+      model: message.model
+    };
+
+    savedMessages.push(newSavedMessage);
+    localStorage.setItem(`savedMessages_${user.uid}`, JSON.stringify(savedMessages));
+    
+    toast({
+      title: "Message Saved",
+      description: "Response has been saved to your collection.",
+    });
+  };
+
   const detectImageGeneration = (content: string): boolean => {
     const imageKeywords = ['generate image', 'create image', 'draw', 'paint', 'show me a picture', 'create artwork', 'make art', 'generate art', 'design image', 'create graphic', 'picture of', 'image of', 'artwork of', 'illustration of', 'generate a'];
     const contentLower = content.toLowerCase();
     return imageKeywords.some(keyword => contentLower.includes(keyword));
   };
 
-  // Smart image editing detection
-  const detectImageEditing = (content: string): boolean => {
-    const editKeywords = ['edit this image', 'modify this image', 'change the', 'remove from image', 'add to image', 'convert this image', 'transform this image', 'alter this image'];
+  const detectImageEditing = (content: string, hasImages: boolean): boolean => {
+    if (!hasImages) return false;
+    const editKeywords = ['edit this image', 'modify this image', 'change the', 'remove from image', 'add to image', 'convert this image', 'transform this image', 'alter this image', 'edit the image', 'modify the image'];
     const contentLower = content.toLowerCase();
     return editKeywords.some(keyword => contentLower.includes(keyword));
   };
@@ -91,7 +106,6 @@ export function ChatInterface() {
       return;
     }
 
-    // Upload images to Firebase Storage first
     let uploadedImageUrls: string[] = [];
     if (images && images.length > 0) {
       try {
@@ -118,22 +132,18 @@ export function ChatInterface() {
     };
     setMessages(prev => [...prev, userMessage]);
 
-    // Check if image generation tool is selected OR smart detection
     const isImageGeneration = tools?.includes('Generate Image') || detectImageGeneration(content);
-    const isImageEditing = imageEditingFile && detectImageEditing(content);
+    const isImageEditing = detectImageEditing(content, uploadedImageUrls.length > 0);
     
     setIsGenerating(true);
     const controller = new AbortController();
     setAbortController(controller);
 
     if (isImageGeneration) {
-      // Handle image generation
       await handleImageGeneration(content, controller);
-    } else if (isImageEditing && imageEditingFile) {
-      // Handle image editing
-      await handleImageEditingRequest(content, imageEditingFile, controller);
+    } else if (isImageEditing) {
+      await handleImageEditingRequest(content, images?.[0], controller);
     } else {
-      // Create AI response message
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
@@ -144,7 +154,6 @@ export function ChatInterface() {
       };
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Generate real AI response with images
       await generateRealAIResponse(assistantMessage.id, content, selectedModel, controller, images);
     }
   };
@@ -155,9 +164,7 @@ export function ChatInterface() {
       setAbortController(null);
     }
     setIsGenerating(false);
-    setImageEditingFile(null);
 
-    // Mark all typing messages as completed
     setMessages(prev => prev.map(msg => msg.isTyping ? {
       ...msg,
       isTyping: false,
@@ -166,7 +173,6 @@ export function ChatInterface() {
   };
 
   const handleImageGeneration = async (prompt: string, controller: AbortController) => {
-    // Create AI response message for image generation
     const assistantMessage: Message = {
       id: (Date.now() + 1).toString(),
       type: 'assistant',
@@ -181,22 +187,18 @@ export function ChatInterface() {
       const imageUrl = await generateImage(prompt, 'flux-1.1-pro');
       if (controller.signal.aborted) return;
 
-      // Upload generated image to Firebase Storage
       let finalImageUrl = imageUrl;
       if (user && imageUrl) {
         try {
-          // Convert URL to File and upload to Firebase
           const response = await fetch(imageUrl);
           const blob = await response.blob();
           const file = new File([blob], `generated-${Date.now()}.png`, { type: 'image/png' });
           finalImageUrl = await uploadFile(file, user.uid, 'generated-images');
         } catch (uploadError) {
           console.error('Failed to upload generated image:', uploadError);
-          // Continue with original URL if upload fails
         }
       }
 
-      // Update message with generated image
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
         ...msg,
         content: `Here's your generated image:`,
@@ -218,10 +220,9 @@ export function ChatInterface() {
     }
   };
 
-  const handleImageEditingRequest = async (prompt: string, imageFile: File, controller: AbortController) => {
-    if (!user) return;
+  const handleImageEditingRequest = async (prompt: string, imageFile: File | undefined, controller: AbortController) => {
+    if (!user || !imageFile) return;
 
-    // Create AI response message for image editing
     const assistantMessage: Message = {
       id: (Date.now() + 1).toString(),
       type: 'assistant',
@@ -236,7 +237,6 @@ export function ChatInterface() {
       const editedImageUrl = await editImage(imageFile, prompt);
       if (controller.signal.aborted) return;
 
-      // Upload edited image to Firebase Storage
       let finalImageUrl = editedImageUrl;
       try {
         const response = await fetch(editedImageUrl);
@@ -245,10 +245,8 @@ export function ChatInterface() {
         finalImageUrl = await uploadFile(file, user.uid, 'edited-images');
       } catch (uploadError) {
         console.error('Failed to upload edited image:', uploadError);
-        // Continue with original URL if upload fails
       }
 
-      // Update message with edited image
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
         ...msg,
         content: `Here's your edited image:`,
@@ -267,17 +265,12 @@ export function ChatInterface() {
     } finally {
       setIsGenerating(false);
       setAbortController(null);
-      setImageEditingFile(null);
     }
   };
 
   const generateRealAIResponse = async (messageId: string, userInput: string, modelId: string, controller: AbortController, images?: File[]) => {
     try {
-      const messages = [{
-        role: 'user' as const,
-        content: userInput
-      }];
-
+      const messages = [{ role: 'user' as const, content: userInput }];
       const stream = generateAIResponseStream(messages, modelId, webMode, false, images);
       let fullResponse = '';
 
@@ -289,10 +282,9 @@ export function ChatInterface() {
           content: fullResponse,
           isTyping: false
         } : msg));
-        await new Promise(resolve => setTimeout(resolve, 30)); // Typing effect
+        await new Promise(resolve => setTimeout(resolve, 30));
       }
 
-      // Final update to ensure typing is stopped
       setMessages(prev => prev.map(msg => msg.id === messageId ? {
         ...msg,
         isTyping: false
@@ -339,7 +331,6 @@ export function ChatInterface() {
     const isImageMessage = currentMessage.tools?.includes('generate-image');
     const modelToUse = newModelId || selectedModel;
 
-    // Reset the assistant message
     setMessages(prev => prev.map(msg => msg.id === messageId ? {
       ...msg,
       content: isImageMessage ? 'Generating image...' : '',
@@ -353,12 +344,10 @@ export function ChatInterface() {
     setIsGenerating(true);
 
     if (isImageMessage) {
-      // Regenerate image with new model
       try {
         const imageUrl = await generateImage(userMessage.content, modelToUse);
         if (controller.signal.aborted) return;
 
-        // Update message with new generated image
         setMessages(prev => prev.map(msg => msg.id === messageId ? {
           ...msg,
           content: `Here's your generated image:`,
@@ -384,7 +373,6 @@ export function ChatInterface() {
 
   const startNewChat = () => {
     setMessages([]);
-    setImageEditingFile(null);
   };
 
   const handleTextSelection = () => {
@@ -401,13 +389,9 @@ export function ChatInterface() {
   };
 
   const handleAskCognix = (text: string) => {
-    // Instead of sending directly, we'll pass the text to ChatInput
     setSelectedText("");
-    // Trigger a custom event to set the input value
     window.dispatchEvent(new CustomEvent('setChatInput', {
-      detail: {
-        text: `"${text}"`
-      }
+      detail: { text: `"${text}"` }
     }));
   };
 
@@ -415,20 +399,9 @@ export function ChatInterface() {
     setSelectedText("");
   };
 
-  const handleImageEditTrigger = (imageFile: File) => {
-    setImageEditingFile(imageFile);
-    // Trigger custom event to focus chat input for editing prompt
-    window.dispatchEvent(new CustomEvent('setChatInput', {
-      detail: {
-        text: `Edit this image (${imageFile.name}): `
-      }
-    }));
-  };
-
   return (
     <div className="flex-1 flex flex-col h-full">
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-20 pb-24" onMouseUp={handleTextSelection}>
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-6 pb-24" onMouseUp={handleTextSelection}>
         {messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">
@@ -461,22 +434,23 @@ export function ChatInterface() {
         ) : (
           <>
             {messages.map(message => (
-              <ChatMessage 
-                key={message.id} 
-                message={message} 
-                onLike={isLiked => handleLikeMessage(message.id, isLiked)} 
-                onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} 
-                onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} 
-                onExport={() => setIsExportOpen(true)} 
-              />
+              <div key={message.id}>
+                <ChatMessage 
+                  message={message} 
+                  onLike={isLiked => handleLikeMessage(message.id, isLiked)} 
+                  onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} 
+                  onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} 
+                  onExport={() => setIsExportOpen(true)}
+                  onSave={() => saveMessage(message.id)}
+                />
+              </div>
             ))}
             <div ref={messagesEndRef} />
           </>
         )}
       </div>
 
-      {/* Fixed Chat input */}
-      <div className="fixed bottom-0 left-0 md:left-16 right-0 p-4 border-t border-border bg-background/95 backdrop-blur-sm z-20">
+      <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 border-t border-border bg-background/95 backdrop-blur-sm z-20">
         <div className="max-w-6xl mx-auto">
           <ChatInput 
             onSendMessage={handleSendMessage} 
@@ -486,18 +460,10 @@ export function ChatInterface() {
             onWebModeToggle={setWebMode} 
             isGenerating={isGenerating} 
             onStopGeneration={handleStopGeneration}
-            onImageEdit={handleImageEditTrigger}
           />
         </div>
       </div>
 
-      {/* Model selector */}
-      <FloatingModelSelector 
-        selectedModel={selectedModel} 
-        onModelChange={setSelectedModel} 
-      />
-
-      {/* Ask Cognix Popover */}
       <AskCognixPopover 
         selectedText={selectedText} 
         position={popoverPosition} 
@@ -505,7 +471,6 @@ export function ChatInterface() {
         onClose={closePopover} 
       />
 
-      {/* Export dialog */}
       <ExportDialog 
         isOpen={isExportOpen} 
         onOpenChange={setIsExportOpen} 

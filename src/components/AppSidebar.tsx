@@ -13,36 +13,51 @@ import {
   FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { getChatHistory, ChatHistory } from "@/services/databaseService";
 
 interface AppSidebarProps {
   onNewChat: () => void;
   onClearHistory: () => void;
   onClose?: () => void;
+  onOpenProfile: () => void;
+  onShowSaved: () => void;
 }
 
-export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarProps) {
+export function AppSidebar({ onNewChat, onClearHistory, onClose, onOpenProfile, onShowSaved }: AppSidebarProps) {
   const isMobile = useIsMobile();
   const [isOpen, setIsOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const [recentChats] = useState([
-    { id: 1, title: "Web Development Tips", timestamp: "2 hours ago" },
-    { id: 2, title: "AI Model Comparison", timestamp: "1 day ago" },
-    { id: 3, title: "React Best Practices", timestamp: "3 days ago" },
-    { id: 4, title: "UI/UX Design Trends", timestamp: "1 week ago" },
-  ]);
+  const [recentChats, setRecentChats] = useState<ChatHistory[]>([]);
+  const { user } = useAuth();
 
   const menuItems = [
     { icon: Plus, label: "New Chat", action: () => { onNewChat(); onClose?.(); }, primary: true },
     { icon: History, label: "History", action: () => console.log("History clicked") },
-    { icon: Bookmark, label: "Saved", action: () => console.log("Saved clicked") },
-    { icon: User, label: "Profile", action: () => console.log("Profile clicked") },
+    { icon: Bookmark, label: "Saved", action: () => { onShowSaved(); onClose?.(); } },
+    { icon: User, label: "Profile", action: () => { onOpenProfile(); onClose?.(); } },
     { icon: HelpCircle, label: "Help", action: () => console.log("Help clicked") },
     { icon: Trash2, label: "Clear History", action: () => { onClearHistory(); onClose?.(); }, destructive: true },
   ];
 
+  // Load chat history when user is available
+  useEffect(() => {
+    if (user) {
+      const loadHistory = async () => {
+        try {
+          const history = await getChatHistory(user.uid);
+          setRecentChats(history.slice(0, 10)); // Show only recent 10 chats
+        } catch (error) {
+          console.error('Failed to load chat history:', error);
+        }
+      };
+      loadHistory();
+    }
+  }, [user]);
+
   // Auto-expand/collapse on hover (desktop only)
   useEffect(() => {
-    if (isMobile) return; // Don't use hover behavior on mobile
+    if (isMobile) return;
     
     const handleMouseEnter = () => setIsOpen(true);
     const handleMouseLeave = () => setIsOpen(false);
@@ -61,7 +76,6 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarPro
     };
   }, [isMobile]);
 
-  // On mobile, always show full sidebar when open
   useEffect(() => {
     if (isMobile) {
       setIsOpen(true);
@@ -78,7 +92,6 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarPro
           : (isOpen ? "w-64" : "w-16")
       )}
     >
-      {/* Close button for mobile */}
       {isMobile && onClose && (
         <button
           onClick={onClose}
@@ -91,7 +104,6 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarPro
         </button>
       )}
 
-      {/* Sidebar header */}
       <div className="h-16 flex items-center justify-center px-4 border-b border-sidebar-border shrink-0">
         {(isOpen || isMobile) ? (
           <div className="flex items-center gap-3 w-full justify-center">
@@ -113,7 +125,6 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarPro
         )}
       </div>
 
-      {/* Menu items */}
       <div className="flex-1 p-4 space-y-2 overflow-y-auto">
         {menuItems.map((item, index) => (
           <button
@@ -135,8 +146,7 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarPro
           </button>
         ))}
 
-        {/* Recent chats - only show when expanded */}
-        {(isOpen || isMobile) && (
+        {(isOpen || isMobile) && recentChats.length > 0 && (
           <div className="mt-8">
             <h3 className="text-sm font-medium text-sidebar-foreground/70 mb-3 px-3">
               Recent Chats
@@ -153,7 +163,7 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarPro
                       {chat.title}
                     </p>
                     <p className="text-xs text-sidebar-foreground/50">
-                      {chat.timestamp}
+                      {new Date(chat.updatedAt).toLocaleDateString()}
                     </p>
                   </div>
                   <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-sidebar-border rounded transition-all shrink-0">

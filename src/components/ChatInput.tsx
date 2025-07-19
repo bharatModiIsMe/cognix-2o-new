@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { 
   Send, 
@@ -11,6 +12,7 @@ import {
   Square
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ImageService } from "@/services/imageService";
 
 interface Tool {
   id: string;
@@ -47,7 +49,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [images, setImages] = useState<File[]>([]);
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -71,12 +73,12 @@ export function ChatInput({
     if (!content.trim() && images.length === 0) return;
     
     try {
-      console.log('Sending message with images:', images.length);
+      console.log('ChatInput: Sending message with images:', images.length);
       onSendMessage(content, images.length > 0 ? images : undefined, selectedTools);
       
       setInput("");
       setImages([]);
-      setImageUrls([]);
+      setImagePreviewUrls([]);
       setSelectedTools([]);
       setIsToolMenuOpen(false);
     } catch (error) {
@@ -99,19 +101,27 @@ export function ChatInput({
     const files = Array.from(e.target.files || []);
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
     
-    console.log('Selected image files:', imageFiles.length);
+    console.log('ChatInput: Selected image files:', imageFiles.length);
     
-    const newUrls = imageFiles.map(file => URL.createObjectURL(file));
+    if (imageFiles.length === 0) return;
+
+    const newPreviewUrls = imageFiles.map(file => ImageService.createImagePreview(file));
     
     setImages(prev => [...prev, ...imageFiles]);
-    setImageUrls(prev => [...prev, ...newUrls]);
+    setImagePreviewUrls(prev => [...prev, ...newPreviewUrls]);
+    
+    // Clear the input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const removeImage = (index: number) => {
-    URL.revokeObjectURL(imageUrls[index]);
+    // Revoke the preview URL to prevent memory leaks
+    ImageService.revokeImagePreview(imagePreviewUrls[index]);
     
     setImages(prev => prev.filter((_, i) => i !== index));
-    setImageUrls(prev => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
   const toggleTool = (toolId: string) => {
@@ -135,7 +145,8 @@ export function ChatInput({
 
   useEffect(() => {
     return () => {
-      imageUrls.forEach(url => URL.revokeObjectURL(url));
+      // Clean up preview URLs on unmount
+      imagePreviewUrls.forEach(url => ImageService.revokeImagePreview(url));
     };
   }, []);
 
@@ -182,16 +193,19 @@ export function ChatInput({
               {images.map((image, index) => (
                 <div
                   key={index}
-                  className="relative group bg-surface border border-border rounded-xl p-3"
+                  className="relative group bg-surface border border-border rounded-xl overflow-hidden"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 p-3">
                     <div className="relative">
                       <img
-                        src={imageUrls[index]}
-                        alt={`Upload ${index + 1}`}
+                        src={imagePreviewUrls[index]}
+                        alt={`Upload preview ${index + 1}`}
                         className="w-16 h-16 object-cover rounded-lg border border-border"
                         onError={(e) => {
-                          console.error('Image load error:', e);
+                          console.error('Image preview error:', e);
+                        }}
+                        onLoad={() => {
+                          console.log('Image preview loaded:', image.name);
                         }}
                       />
                     </div>
@@ -296,6 +310,7 @@ export function ChatInput({
             onClick={() => fileInputRef.current?.click()}
             className="p-2 hover:bg-accent rounded-lg transition-colors"
             disabled={disabled}
+            title="Upload images"
           >
             <ImageIcon className="w-5 h-5 text-muted-foreground" />
           </button>

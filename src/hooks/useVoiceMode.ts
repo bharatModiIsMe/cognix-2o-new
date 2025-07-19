@@ -1,5 +1,5 @@
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { VoiceRecorder, AudioPlayer, transcribeAudio, synthesizeSpeech, processVoiceMessage } from '@/services/voiceService';
 
 export interface VoiceModeState {
@@ -23,9 +23,21 @@ export function useVoiceMode() {
   const playerRef = useRef<AudioPlayer | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isProcessingRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  // Track component mount state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      cleanup();
+    };
+  }, []);
 
   const updateState = useCallback((updates: Partial<VoiceModeState>) => {
-    setState(prev => ({ ...prev, ...updates }));
+    if (isMountedRef.current) {
+      setState(prev => ({ ...prev, ...updates }));
+    }
   }, []);
 
   const cleanup = useCallback(() => {
@@ -60,8 +72,8 @@ export function useVoiceMode() {
   }, []);
 
   const startRecording = useCallback(async () => {
-    if (isProcessingRef.current) {
-      console.log('⚠️ Already processing, ignoring start recording');
+    if (isProcessingRef.current || !isMountedRef.current) {
+      console.log('⚠️ Cannot start recording - processing or unmounted');
       return;
     }
 
@@ -81,10 +93,12 @@ export function useVoiceMode() {
       
       await recorderRef.current.startRecording(() => {
         console.log('🔇 Auto-stop triggered by silence');
-        if (!isProcessingRef.current) {
+        if (!isProcessingRef.current && isMountedRef.current) {
           stopRecording();
         }
       });
+
+      if (!isMountedRef.current) return;
 
       updateState({ 
         isRecording: true, 
@@ -94,7 +108,7 @@ export function useVoiceMode() {
       // Safety timeout
       timeoutRef.current = setTimeout(() => {
         console.log('⏰ Recording timeout reached');
-        if (!isProcessingRef.current) {
+        if (!isProcessingRef.current && isMountedRef.current) {
           stopRecording();
         }
       }, 30000);
@@ -102,16 +116,18 @@ export function useVoiceMode() {
     } catch (error) {
       console.error('Failed to start recording:', error);
       cleanup();
-      updateState({ 
-        error: error instanceof Error ? error.message : 'Failed to start recording',
-        currentStatus: 'Error',
-        isRecording: false
-      });
+      if (isMountedRef.current) {
+        updateState({ 
+          error: error instanceof Error ? error.message : 'Failed to start recording',
+          currentStatus: 'Error',
+          isRecording: false
+        });
+      }
     }
   }, [cleanup, updateState]);
 
   const stopRecording = useCallback(async () => {
-    if (!recorderRef.current || isProcessingRef.current) {
+    if (!recorderRef.current || isProcessingRef.current || !isMountedRef.current) {
       console.warn('No recorder to stop or already processing');
       return;
     }
@@ -134,6 +150,8 @@ export function useVoiceMode() {
       const audioBlob = await recorderRef.current.stopRecording();
       recorderRef.current = null;
       
+      if (!isMountedRef.current) return;
+      
       if (audioBlob.size < 500) {
         updateState({ 
           isProcessing: false,
@@ -147,6 +165,8 @@ export function useVoiceMode() {
       // Transcribe audio
       updateState({ currentStatus: 'Converting speech to text...' });
       const transcribedText = await transcribeAudio(audioBlob);
+      
+      if (!isMountedRef.current) return;
       
       if (!transcribedText.trim()) {
         updateState({ 
@@ -164,6 +184,8 @@ export function useVoiceMode() {
       updateState({ currentStatus: 'Getting AI response...' });
       const aiResponse = await processVoiceMessage(transcribedText);
 
+      if (!isMountedRef.current) return;
+
       if (!aiResponse.trim()) {
         updateState({ 
           isProcessing: false,
@@ -180,6 +202,8 @@ export function useVoiceMode() {
       updateState({ currentStatus: 'Converting AI response to speech...' });
       const audioBuffer = await synthesizeSpeech(aiResponse);
 
+      if (!isMountedRef.current) return;
+
       // Play response
       updateState({ 
         isProcessing: false, 
@@ -189,10 +213,12 @@ export function useVoiceMode() {
 
       playerRef.current = new AudioPlayer();
       await playerRef.current.playAudio(audioBuffer, () => {
-        updateState({ 
-          isPlaying: false,
-          currentStatus: 'Ready - Tap to speak again!' 
-        });
+        if (isMountedRef.current) {
+          updateState({ 
+            isPlaying: false,
+            currentStatus: 'Ready - Tap to speak again!' 
+          });
+        }
         playerRef.current = null;
         isProcessingRef.current = false;
       });
@@ -200,12 +226,14 @@ export function useVoiceMode() {
     } catch (error) {
       console.error('Error in voice processing pipeline:', error);
       cleanup();
-      updateState({ 
-        isProcessing: false,
-        isPlaying: false,
-        error: error instanceof Error ? error.message : 'Voice processing failed',
-        currentStatus: 'Error - Tap to try again'
-      });
+      if (isMountedRef.current) {
+        updateState({ 
+          isProcessing: false,
+          isPlaying: false,
+          error: error instanceof Error ? error.message : 'Voice processing failed',
+          currentStatus: 'Error - Tap to try again'
+        });
+      }
       isProcessingRef.current = false;
     }
   }, [cleanup, updateState]);
@@ -215,42 +243,47 @@ export function useVoiceMode() {
     if (playerRef.current) {
       playerRef.current.stopAudio();
       playerRef.current = null;
-      updateState({ 
-        isPlaying: false,
-        currentStatus: 'Ready' 
-      });
+      if (isMountedRef.current) {
+        updateState({ 
+          isPlaying: false,
+          currentStatus: 'Ready' 
+        });
+      }
     }
     isProcessingRef.current = false;
   }, [updateState]);
 
   const toggleRecording = useCallback(() => {
-    setState(currentState => {
-      if (currentState.isRecording) {
-        stopRecording();
-      } else if (!currentState.isProcessing && !currentState.isPlaying && !isProcessingRef.current) {
-        startRecording();
-      }
-      return currentState;
-    });
-  }, [startRecording, stopRecording]);
+    if (!isMountedRef.current) return;
+    
+    if (state.isRecording) {
+      stopRecording();
+    } else if (!state.isProcessing && !state.isPlaying && !isProcessingRef.current) {
+      startRecording();
+    }
+  }, [state.isRecording, state.isProcessing, state.isPlaying, startRecording, stopRecording]);
 
   const clearError = useCallback(() => {
-    updateState({ 
-      error: null, 
-      currentStatus: 'Ready' 
-    });
+    if (isMountedRef.current) {
+      updateState({ 
+        error: null, 
+        currentStatus: 'Ready' 
+      });
+    }
   }, [updateState]);
 
   const reset = useCallback(() => {
     console.log('🔄 Resetting voice mode');
     cleanup();
-    setState({
-      isRecording: false,
-      isProcessing: false,
-      isPlaying: false,
-      error: null,
-      currentStatus: 'Ready'
-    });
+    if (isMountedRef.current) {
+      setState({
+        isRecording: false,
+        isProcessing: false,
+        isPlaying: false,
+        error: null,
+        currentStatus: 'Ready'
+      });
+    }
   }, [cleanup]);
 
   return {

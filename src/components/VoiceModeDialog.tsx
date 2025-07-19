@@ -87,10 +87,9 @@ export function VoiceModeDialog({ isOpen, onOpenChange }: VoiceModeDialogProps) 
     }
   }, [isOpen, state.error, clearError]);
 
-  // Don't auto-close - let user control when to exit voice mode
+  // Clean up when dialog closes
   useEffect(() => {
     if (!isOpen && isActive) {
-      // If dialog is closed but voice mode is active, stop everything
       if (state.isRecording) {
         toggleRecording();
       }

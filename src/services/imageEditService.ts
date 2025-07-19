@@ -22,27 +22,25 @@ async function fileToBase64(file: File): Promise<string> {
 
 export async function editImageWithContext(imageFile: File, prompt: string): Promise<string> {
   try {
-    console.log('🖼️ Starting contextual image editing...');
+    console.log('🖼️ Starting image editing with context...');
     console.log('Image file:', imageFile.name, 'Size:', imageFile.size);
     console.log('Edit prompt:', prompt);
 
     // Convert image to base64
     const imageBase64 = await fileToBase64(imageFile);
     
-    // Use image-to-image editing with the original image as context
-    const editingPrompt = `Based on the provided image, make the following changes: ${prompt}. 
-    Keep the same composition, lighting, and overall structure. Only modify what is specifically requested.
-    Maintain the original image quality and style.`;
-
-    const response = await a4fClient.chat.completions.create({
-      model: 'provider-3/FLUX.1-dev', // Using flux-dev for better image editing
+    // Use vision model to understand the image and create editing instructions
+    const analysisResponse = await a4fClient.chat.completions.create({
+      model: 'provider-6/gpt-4o',
       messages: [
         {
           role: 'user',
           content: [
             { 
               type: "text", 
-              text: editingPrompt
+              text: `Analyze this image and describe what you see in detail. Then, based on this description, create a detailed prompt for image generation that incorporates the following edit: "${prompt}". 
+
+              The prompt should maintain the original composition, lighting, pose, and overall structure while making only the requested changes. Be very specific about preserving existing elements while describing the edit.`
             },
             {
               type: "image_url",
@@ -51,24 +49,20 @@ export async function editImageWithContext(imageFile: File, prompt: string): Pro
           ]
         }
       ],
-      max_tokens: 1000,
+      max_tokens: 500,
     });
 
-    const content = response.choices[0]?.message?.content;
-    if (content) {
-      // Look for image URLs in the response
-      const urlMatch = content.match(/https?:\/\/[^\s]+\.(jpg|jpeg|png|webp|gif)/i);
-      if (urlMatch) {
-        console.log('✅ Image editing successful:', urlMatch[0]);
-        return urlMatch[0];
-      }
+    const analysisContent = analysisResponse.choices[0]?.message?.content;
+    if (!analysisContent) {
+      throw new Error('Failed to analyze image for editing');
     }
 
-    // Fallback: Try with image generation API with the original image
-    console.log('🔄 Trying image generation API for editing...');
+    console.log('📝 Image analysis completed:', analysisContent);
+
+    // Generate new image based on analysis and edit instruction
     const imageResponse = await a4fClient.images.generate({
       model: 'provider-3/FLUX.1-dev',
-      prompt: `Edit this image: ${prompt}. Keep the original composition and style.`,
+      prompt: analysisContent,
       n: 1,
       size: "1024x1024",
       response_format: "url"
@@ -76,7 +70,7 @@ export async function editImageWithContext(imageFile: File, prompt: string): Pro
 
     const imageUrl = imageResponse.data[0]?.url;
     if (imageUrl) {
-      console.log('✅ Fallback image editing successful:', imageUrl);
+      console.log('✅ Image editing successful:', imageUrl);
       return imageUrl;
     }
 

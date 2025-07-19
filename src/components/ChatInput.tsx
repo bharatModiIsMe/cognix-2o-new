@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { IconButton } from "@/components/ui/icon-button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Mic, Send, Stop, ImagePlus, X } from "lucide-react";
+import { Mic, Send, Square, ImagePlus, X } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import {
   Popover,
@@ -228,7 +228,7 @@ export function ChatInput({
             className="shrink-0"
           >
             {isGenerating ? (
-              <Stop className="w-4 h-4 animate-pulse" />
+              <Square className="w-4 h-4 animate-pulse" />
             ) : (
               <Send className="w-4 h-4" />
             )}

@@ -9,10 +9,10 @@ import {
   PenTool,
   FileText,
   Globe,
-  Square
+  Square,
+  Edit
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ImageService } from "@/services/imageService";
 
 interface Tool {
   id: string;
@@ -36,6 +36,7 @@ interface ChatInputProps {
   onWebModeToggle?: (enabled: boolean) => void;
   isGenerating?: boolean;
   onStopGeneration?: () => void;
+  onImageEdit?: (imageFile: File) => void;
 }
 
 export function ChatInput({ 
@@ -45,16 +46,18 @@ export function ChatInput({
   webMode = false, 
   onWebModeToggle, 
   isGenerating = false, 
-  onStopGeneration
+  onStopGeneration,
+  onImageEdit
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [images, setImages] = useState<File[]>([]);
-  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Listen for custom event to set input value (from Ask Cognix)
   useEffect(() => {
     const handleSetChatInput = (event: CustomEvent) => {
       setInput(event.detail.text);
@@ -73,12 +76,12 @@ export function ChatInput({
     if (!content.trim() && images.length === 0) return;
     
     try {
-      console.log('ChatInput: Sending message with images:', images.length);
-      onSendMessage(content, images.length > 0 ? images : undefined, selectedTools);
+      onSendMessage(content, images, selectedTools);
       
+      // Clear the form
       setInput("");
       setImages([]);
-      setImagePreviewUrls([]);
+      setImageUrls([]);
       setSelectedTools([]);
       setIsToolMenuOpen(false);
     } catch (error) {
@@ -101,27 +104,26 @@ export function ChatInput({
     const files = Array.from(e.target.files || []);
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
     
-    console.log('ChatInput: Selected image files:', imageFiles.length);
-    
-    if (imageFiles.length === 0) return;
-
-    const newPreviewUrls = imageFiles.map(file => ImageService.createImagePreview(file));
+    // Create URLs for preview
+    const newUrls = imageFiles.map(file => URL.createObjectURL(file));
     
     setImages(prev => [...prev, ...imageFiles]);
-    setImagePreviewUrls(prev => [...prev, ...newPreviewUrls]);
-    
-    // Clear the input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    setImageUrls(prev => [...prev, ...newUrls]);
   };
 
   const removeImage = (index: number) => {
-    // Revoke the preview URL to prevent memory leaks
-    ImageService.revokeImagePreview(imagePreviewUrls[index]);
+    // Revoke the URL to prevent memory leaks
+    URL.revokeObjectURL(imageUrls[index]);
     
     setImages(prev => prev.filter((_, i) => i !== index));
-    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+    setImageUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleImageEdit = (index: number) => {
+    const imageFile = images[index];
+    if (imageFile && onImageEdit) {
+      onImageEdit(imageFile);
+    }
   };
 
   const toggleTool = (toolId: string) => {
@@ -143,15 +145,16 @@ export function ChatInput({
     adjustTextareaHeight();
   }, [input]);
 
+  // Cleanup URLs on unmount
   useEffect(() => {
     return () => {
-      // Clean up preview URLs on unmount
-      imagePreviewUrls.forEach(url => ImageService.revokeImagePreview(url));
+      imageUrls.forEach(url => URL.revokeObjectURL(url));
     };
   }, []);
 
   return (
     <div className="w-full max-w-4xl mx-auto">
+      {/* Web Mode indicator */}
       {webMode && (
         <div className="mb-2 flex items-center gap-2 text-xs">
           <div className="flex items-center gap-2 text-blue-500">
@@ -161,8 +164,10 @@ export function ChatInput({
         </div>
       )}
       
+      {/* Selected tools and images display */}
       {(selectedTools.length > 0 || images.length > 0) && (
         <div className="mb-3 space-y-3">
+          {/* Tools */}
           {selectedTools.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {selectedTools.map(toolId => {
@@ -188,28 +193,33 @@ export function ChatInput({
             </div>
           )}
 
+          {/* Images with thumbnails */}
           {images.length > 0 && (
             <div className="flex flex-wrap gap-3">
               {images.map((image, index) => (
                 <div
                   key={index}
-                  className="relative group bg-surface border border-border rounded-xl overflow-hidden"
+                  className="relative group bg-surface border border-border rounded-xl p-3"
                 >
-                  <div className="flex items-center gap-3 p-3">
+                  <div className="flex items-center gap-3">
+                    {/* Thumbnail */}
                     <div className="relative">
                       <img
-                        src={imagePreviewUrls[index]}
-                        alt={`Upload preview ${index + 1}`}
+                        src={imageUrls[index]}
+                        alt={`Upload ${index + 1}`}
                         className="w-16 h-16 object-cover rounded-lg border border-border"
-                        onError={(e) => {
-                          console.error('Image preview error:', e);
-                        }}
-                        onLoad={() => {
-                          console.log('Image preview loaded:', image.name);
-                        }}
                       />
+                      {/* Edit button overlay */}
+                      <button
+                        onClick={() => handleImageEdit(index)}
+                        className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        title="Edit this image"
+                      >
+                        <Edit className="w-5 h-5 text-white" />
+                      </button>
                     </div>
                     
+                    {/* File info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <ImageIcon className="w-4 h-4 text-blue-500 flex-shrink-0" />
@@ -220,6 +230,7 @@ export function ChatInput({
                       </div>
                     </div>
                     
+                    {/* Remove button */}
                     <button
                       onClick={() => removeImage(index)}
                       className="p-1.5 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground transition-colors"
@@ -234,10 +245,12 @@ export function ChatInput({
         </div>
       )}
 
+      {/* Main input area */}
       <div className={cn(
         "relative flex items-end gap-3 p-4 bg-surface border border-border rounded-2xl",
         "focus-within:border-primary/50 focus-within:shadow-surface transition-all duration-200"
       )}>
+        {/* Tool menu */}
         <div className="relative">
           <button
             onClick={() => setIsToolMenuOpen(!isToolMenuOpen)}
@@ -278,6 +291,7 @@ export function ChatInput({
           )}
         </div>
 
+        {/* Text input */}
         <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
@@ -291,7 +305,9 @@ export function ChatInput({
           />
         </div>
 
+        {/* Action buttons */}
         <div className="flex items-center gap-2">
+          {/* Web Mode toggle */}
           <button
             onClick={() => onWebModeToggle?.(!webMode)}
             className={cn(
@@ -306,15 +322,16 @@ export function ChatInput({
             <Globe className="w-5 h-5" />
           </button>
 
+          {/* Image upload */}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="p-2 hover:bg-accent rounded-lg transition-colors"
             disabled={disabled}
-            title="Upload images"
           >
             <ImageIcon className="w-5 h-5 text-muted-foreground" />
           </button>
 
+          {/* Send/Stop button */}
           <button
             onClick={isGenerating ? onStopGeneration : handleSubmit}
             disabled={!isGenerating && (disabled || (!input.trim() && images.length === 0))}
@@ -335,6 +352,7 @@ export function ChatInput({
           </button>
         </div>
 
+        {/* Hidden file input */}
         <input
           ref={fileInputRef}
           type="file"

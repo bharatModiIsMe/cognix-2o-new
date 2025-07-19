@@ -1,6 +1,6 @@
+
 import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
-import { ImageService } from './imageService';
 
 const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
 const a4fBaseUrl = 'https://api.a4f.co/v1';
@@ -17,7 +17,6 @@ export interface AIModel {
   apiModel: string;
   description: string;
   badge?: string;
-  supportsVision?: boolean;
 }
 
 export const AI_MODELS: AIModel[] = [
@@ -26,48 +25,42 @@ export const AI_MODELS: AIModel[] = [
     name: "Gemini 2.5 Pro",
     apiModel: "provider-6/gemini-2.5-flash-thinking",
     description: "Google's most advanced model with thinking capabilities",
-    badge: "Pro",
-    supportsVision: true
+    badge: "Pro"
   },
   {
     id: "cognix-2o-web",
     name: "Cognix-2o Web",
     apiModel: "provider-6/gpt-4o-mini-search-preview",
     description: "Web-enabled AI with real-time search capabilities",
-    badge: "Web",
-    supportsVision: true
+    badge: "Web"
   },
   {
     id: "deepseek-v3",
     name: "DeepSeek V3",
     apiModel: "provider-3/deepseek-v3-0324",
     description: "Advanced reasoning and coding capabilities",
-    badge: "Reasoning",
-    supportsVision: false
+    badge: "Reasoning"
   },
   {
     id: "gpt-4o",
     name: "GPT-4o",
     apiModel: "provider-6/gpt-4o",
     description: "OpenAI's powerful multimodal model",
-    badge: "Vision",
-    supportsVision: true
+    badge: "Vision"
   },
   {
     id: "cognix-2o-reasoning",
     name: "Cognix-2o Reasoning",
     apiModel: "provider-1/sonar-reasoning",
     description: "Advanced reasoning capabilities",
-    badge: "Reasoning",
-    supportsVision: false
+    badge: "Reasoning"
   },
   {
     id: "gpt-4.1-mini",
     name: "GPT-4.1 Mini",
     apiModel: "provider-6/gpt-4.1-mini",
     description: "Fast and efficient AI model",
-    badge: "Fast",
-    supportsVision: true
+    badge: "Fast"
   }
 ];
 
@@ -197,64 +190,119 @@ function needsWebSearch(query: string): boolean {
   return webSearchTriggers.some(trigger => trigger.test(query));
 }
 
+// Helper function to convert File to base64
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = error => reject(error);
+  });
+}
+
+export async function generateAIResponse(
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  modelId: string,
+  images?: File[]
+): Promise<string> {
+  const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
+
+  try {
+    // Convert images to base64 if provided
+    const imageUrls: string[] = [];
+    if (images && images.length > 0) {
+      for (const image of images) {
+        const base64 = await fileToBase64(image);
+        imageUrls.push(base64);
+      }
+    }
+
+    // Prepare messages with images for all models
+    const enhancedMessages = messages.map((msg, index) => {
+      if (msg.role === 'user' && index === messages.length - 1 && imageUrls.length > 0) {
+        // Add images to the last user message for all models
+        return {
+          role: 'user' as const,
+          content: [
+            { type: "text" as const, text: msg.content },
+            ...imageUrls.map(url => ({
+              type: "image_url" as const,
+              image_url: { url }
+            }))
+          ]
+        };
+      }
+      return {
+        role: msg.role,
+        content: msg.content
+      };
+    });
+
+    const response = await a4fClient.chat.completions.create({
+      model: model.apiModel,
+      messages: enhancedMessages,
+      stream: false,
+    });
+
+    return response.choices[0]?.message?.content || "I apologize, but I couldn't generate a response at this time.";
+  } catch (error) {
+    console.error('AI API Error:', error);
+    return "I'm experiencing some technical difficulties right now. Please try again in a moment.";
+  }
+}
+
 export async function generateImage(prompt: string, modelId: string): Promise<string> {
   const imageModel = IMAGE_MODELS.find(m => m.id === modelId) || IMAGE_MODELS[0];
   
   try {
-    console.log('AIService: Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
+    console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    const response = await a4fClient.images.generate({
+    const response = await a4fClient.chat.completions.create({
       model: imageModel.apiModel,
-      prompt: prompt,
-      n: 1,
-      size: "1024x1024"
-    });
-
-    if (response.data && response.data[0] && response.data[0].url) {
-      console.log('AIService: Image generated successfully:', response.data[0].url);
-      return response.data[0].url;
-    }
-
-    // Fallback to chat completions if images endpoint doesn't work
-    console.log('AIService: Falling back to chat completions for image generation');
-    const chatResponse = await a4fClient.chat.completions.create({
-      model: imageModel.apiModel,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
       stream: false,
     });
 
-    const content = chatResponse.choices[0]?.message?.content;
+    // For image generation, the response content should contain the image URL or data
+    const content = response.choices[0]?.message?.content;
     if (content) {
+      // If the content contains a URL, return it
       if (content.includes('http')) {
         const urlMatch = content.match(/https?:\/\/[^\s]+/);
         if (urlMatch) {
-          console.log('AIService: Found image URL in chat response:', urlMatch[0]);
+          console.log('Found image URL:', urlMatch[0]);
           return urlMatch[0];
         }
       }
+      // If it's base64 data, return it
       if (content.startsWith('data:image')) {
-        console.log('AIService: Found base64 image in chat response');
+        console.log('Found base64 image');
         return content;
       }
     }
 
+    console.log('Unexpected response structure:', JSON.stringify(response, null, 2));
     throw new Error('No image data found in response');
     
   } catch (error) {
-    console.error('AIService: Image generation error:', error);
+    console.error('Image generation error:', error);
     throw new Error(`Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
-export async function editImage(imageUrl: string, prompt: string): Promise<string> {
-  const editModel = IMAGE_EDIT_MODELS[0];
+export async function editImage(imageFile: File, prompt: string): Promise<string> {
+  const editModel = IMAGE_EDIT_MODELS[0]; // Use flux-kontext-dev
   
   try {
-    console.log('AIService: Editing image with model:', editModel.apiModel, 'prompt:', prompt);
+    console.log('Editing image with model:', editModel.apiModel, 'prompt:', prompt);
     
-    // Convert image URL to base64
-    const base64Image = await ImageService.urlToBase64(imageUrl);
-    console.log('AIService: Image converted to base64 for editing');
+    // Convert image to base64
+    const base64Image = await fileToBase64(imageFile);
     
     const response = await a4fClient.chat.completions.create({
       model: editModel.apiModel,
@@ -273,26 +321,29 @@ export async function editImage(imageUrl: string, prompt: string): Promise<strin
       stream: false,
     });
 
+    // For image editing, the response content should contain the edited image URL or data
     const content = response.choices[0]?.message?.content;
     if (content) {
+      // If the content contains a URL, return it
       if (content.includes('http')) {
         const urlMatch = content.match(/https?:\/\/[^\s]+/);
         if (urlMatch) {
-          console.log('AIService: Found edited image URL:', urlMatch[0]);
+          console.log('Found edited image URL:', urlMatch[0]);
           return urlMatch[0];
         }
       }
+      // If it's base64 data, return it
       if (content.startsWith('data:image')) {
-        console.log('AIService: Found edited base64 image');
+        console.log('Found edited base64 image');
         return content;
       }
     }
 
-    console.log('AIService: Unexpected edit response structure:', JSON.stringify(response, null, 2));
+    console.log('Unexpected edit response structure:', JSON.stringify(response, null, 2));
     throw new Error('No edited image data found in response');
     
   } catch (error) {
-    console.error('AIService: Image editing error:', error);
+    console.error('Image editing error:', error);
     throw new Error(`Failed to edit image: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -301,27 +352,20 @@ export async function* generateAIResponseStream(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   modelId: string,
   webMode: boolean = false,
-  imageUrls: string[] = []
+  isImageGeneration: boolean = false,
+  images?: File[]
 ): AsyncGenerator<string, void, unknown> {
   const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
 
   try {
-    console.log('AIService: generateAIResponseStream called with:', {
-      modelId,
-      webMode,
-      imagesCount: imageUrls.length,
-      messagesCount: messages.length,
-      modelSupportsVision: model.supportsVision,
-      imageUrls: imageUrls.slice(0, 2) // Log first 2 URLs for debugging
-    });
-
-    // Check if we need to perform web search
+    // Check if we need to perform web search (automatically or via web mode)
     let searchResults: SearchResult[] = [];
     let enhancedMessages = [...messages];
     let isWebSearchTriggered = false;
     
     const lastUserMessage = messages[messages.length - 1];
     if (lastUserMessage?.role === 'user') {
+      // Automatic detection or manual web mode
       const shouldSearch = webMode || needsWebSearch(lastUserMessage.content);
       
       if (shouldSearch) {
@@ -339,62 +383,37 @@ export async function* generateAIResponseStream(
             yield "No relevant search results found. Providing general information...\n\n";
           }
         } catch (error) {
-          console.error('AIService: Web search failed:', error);
+          console.error('Web search failed:', error);
           yield "Web search temporarily unavailable. Providing general information...\n\n";
         }
       }
     }
 
-    // Prepare messages with images for vision-capable models
-    let finalMessages;
-    
-    if (imageUrls.length > 0 && model.supportsVision) {
-      console.log('AIService: Adding images to vision-capable model:', model.name);
-      
-      // Convert image URLs to base64
-      const base64Images: string[] = [];
-      for (const url of imageUrls) {
-        try {
-          console.log('AIService: Converting image URL to base64:', url.substring(0, 50) + '...');
-          const base64 = await ImageService.urlToBase64(url);
-          base64Images.push(base64);
-          console.log('AIService: Successfully converted image URL to base64');
-        } catch (error) {
-          console.error('AIService: Error converting image URL to base64:', error);
-        }
+    // Convert images to base64 if provided
+    const imageUrls: string[] = [];
+    if (images && images.length > 0) {
+      for (const image of images) {
+        const base64 = await fileToBase64(image);
+        imageUrls.push(base64);
       }
+    }
 
-      if (base64Images.length > 0 && enhancedMessages.length > 0) {
-        const lastMessageIndex = enhancedMessages.length - 1;
-        const lastMessage = enhancedMessages[lastMessageIndex];
-        if (lastMessage.role === 'user') {
-          finalMessages = [
-            ...enhancedMessages.slice(0, -1),
-            {
-              role: 'user' as const,
-              content: [
-                { type: "text" as const, text: lastMessage.content },
-                ...base64Images.map(url => ({
-                  type: "image_url" as const,
-                  image_url: { url }
-                }))
-              ]
-            }
-          ];
-          console.log('AIService: Images added to user message successfully, count:', base64Images.length);
-        } else {
-          finalMessages = enhancedMessages;
-        }
-      } else {
-        finalMessages = enhancedMessages;
-        console.log('AIService: No base64 images to add or no messages');
+    // Add images to the last user message if provided - works for all models
+    if (imageUrls.length > 0 && enhancedMessages.length > 0) {
+      const lastMessageIndex = enhancedMessages.length - 1;
+      const lastMessage = enhancedMessages[lastMessageIndex];
+      if (lastMessage.role === 'user') {
+        enhancedMessages[lastMessageIndex] = {
+          role: 'user',
+          content: [
+            { type: "text" as const, text: lastMessage.content },
+            ...imageUrls.map(url => ({
+              type: "image_url" as const,
+              image_url: { url }
+            }))
+          ] as any
+        };
       }
-    } else {
-      if (imageUrls.length > 0 && !model.supportsVision) {
-        console.log('AIService: Model does not support vision, showing warning');
-        yield "⚠️ **Note:** The selected model doesn't support image analysis. Please choose a vision-capable model like GPT-4o or Gemini for image analysis.\n\n";
-      }
-      finalMessages = enhancedMessages;
     }
 
     // Enhanced system prompt
@@ -402,11 +421,9 @@ export async function* generateAIResponseStream(
 
 IMPORTANT: You have access to real-time information through web search results when provided. NEVER say "I don't have real-time access" or "I can't provide current information" - you can and do have access through search results.
 
-${model.supportsVision ? 'You can also see and analyze images that users upload. When users share images, describe what you see and help them with any questions about the images. Be detailed and helpful in your image analysis.' : ''}
+You can also see and analyze images that users upload. When users share images, describe what you see and help them with any questions about the images.
 
 ${isWebSearchTriggered ? '🌐 **Web search was performed** - Use the provided search results to give accurate, current information. Present it naturally as if you knew it directly.' : ''}
-
-${imageUrls.length > 0 && model.supportsVision ? `🖼️ **Images provided (${imageUrls.length})** - Analyze the uploaded images carefully and provide detailed, helpful responses about what you see.` : ''}
 
 Format your responses using markdown:
 - Use **bold** for important terms and emphasis
@@ -422,33 +439,30 @@ Always provide well-structured, formatted responses that are easy to read and un
       model: model.apiModel,
       messages: [
         { role: 'system', content: systemPrompt },
-        ...finalMessages
+        ...enhancedMessages
       ],
       stream: true,
     };
 
-    console.log('AIService: Making API request to:', model.apiModel, 'with', requestBody.messages.length, 'messages');
-
     const response = await a4fClient.chat.completions.create(requestBody) as any;
 
     if (response[Symbol.asyncIterator]) {
-      console.log('AIService: Processing streaming response...');
+      // Streaming response
       for await (const chunk of response) {
         const content = chunk.choices[0]?.delta?.content;
         if (content) {
           yield content;
         }
       }
-      console.log('AIService: Streaming response completed');
     } else {
-      console.log('AIService: Processing non-streaming response...');
+      // Non-streaming response
       const content = response.choices[0]?.message?.content;
       if (content) {
         yield content;
       }
     }
   } catch (error) {
-    console.error('AIService: AI API Stream Error:', error);
+    console.error('AI API Stream Error:', error);
     yield "I'm experiencing some technical difficulties right now. Please try again in a moment.";
   }
 }

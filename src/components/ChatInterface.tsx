@@ -2,12 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import { ChatInput } from "@/components/ChatInput";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ExportDialog } from "@/components/ExportDialog";
+import { FloatingModelSelector } from "@/components/FloatingModelSelector";
 import { AskCognixPopover } from "@/components/AskCognixPopover";
 import { generateAIResponseStream, generateImage, editImage, AI_MODELS, IMAGE_MODELS } from "@/services/aiService";
-import { ImageService, ImageUpload } from "@/services/imageService";
-import { saveChatHistory } from "@/services/databaseService";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
 
 export interface Message {
   id: string;
@@ -22,151 +19,72 @@ export interface Message {
   disliked?: boolean;
 }
 
-interface ChatInterfaceProps {
-  selectedModel: string;
-  onModelChange: (modelId: string) => void;
-}
-
-export function ChatInterface({ selectedModel, onModelChange }: ChatInterfaceProps) {
+export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [selectedModel, setSelectedModel] = useState("gemini-2.5-pro");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [selectedText, setSelectedText] = useState("");
-  const [popoverPosition, setPopoverPosition] = useState({ x: 0, y: 0 });
+  const [popoverPosition, setPopoverPosition] = useState({
+    x: 0,
+    y: 0
+  });
   const [webMode, setWebMode] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [imageEditingFile, setImageEditingFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { user } = useAuth();
-  const { toast } = useToast();
   
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth"
+    });
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    if (messages.length > 0 && user) {
-      const saveHistory = async () => {
-        try {
-          const title = messages[0]?.content.slice(0, 50) + (messages[0]?.content.length > 50 ? '...' : '');
-          await saveChatHistory(user.uid, messages, title);
-        } catch (error) {
-          console.error('Failed to save chat history:', error);
-        }
-      };
-      
-      const timeoutId = setTimeout(saveHistory, 2000);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [messages, user]);
-
-  const saveMessage = (messageId: string) => {
-    const message = messages.find(msg => msg.id === messageId);
-    if (!message || !user) return;
-
-    const savedMessages = JSON.parse(localStorage.getItem(`savedMessages_${user.uid}`) || '[]');
-    const newSavedMessage = {
-      id: Date.now().toString(),
-      content: message.content,
-      timestamp: new Date(),
-      model: message.model,
-      images: message.images
-    };
-
-    savedMessages.push(newSavedMessage);
-    localStorage.setItem(`savedMessages_${user.uid}`, JSON.stringify(savedMessages));
-    
-    toast({
-      title: "Message Saved",
-      description: "Response has been saved to your collection.",
-    });
-  };
-
+  // Smart image generation detection
   const detectImageGeneration = (content: string): boolean => {
     const imageKeywords = ['generate image', 'create image', 'draw', 'paint', 'show me a picture', 'create artwork', 'make art', 'generate art', 'design image', 'create graphic', 'picture of', 'image of', 'artwork of', 'illustration of', 'generate a'];
     const contentLower = content.toLowerCase();
     return imageKeywords.some(keyword => contentLower.includes(keyword));
   };
 
-  const detectImageEditing = (content: string, hasImages: boolean): boolean => {
-    if (!hasImages) return false;
-    const editKeywords = ['edit this image', 'modify this image', 'change the', 'remove from image', 'add to image', 'convert this image', 'transform this image', 'alter this image', 'edit the image', 'modify the image'];
+  // Smart image editing detection
+  const detectImageEditing = (content: string): boolean => {
+    const editKeywords = ['edit this image', 'modify this image', 'change the', 'remove from image', 'add to image', 'convert this image', 'transform this image', 'alter this image'];
     const contentLower = content.toLowerCase();
     return editKeywords.some(keyword => contentLower.includes(keyword));
   };
 
   const handleSendMessage = async (content: string, images?: File[], tools?: string[]) => {
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please sign in to use Cognix.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    console.log('ChatInterface: handleSendMessage called with:', { 
-      content, 
-      imagesCount: images?.length || 0, 
-      tools 
-    });
-
-    let processedImages: ImageUpload[] = [];
-    
-    // Process images if provided
-    if (images && images.length > 0) {
-      console.log('ChatInterface: Processing images...');
-      try {
-        processedImages = await ImageService.processImageFiles(images, user.uid);
-        console.log('ChatInterface: All images processed successfully:', processedImages.length);
-      } catch (error) {
-        console.error('ChatInterface: Failed to process images:', error);
-        toast({
-          title: "Upload Failed",
-          description: "Failed to upload images. Please try again.",
-          variant: "destructive"
-        });
-        return;
-      }
-    }
-
-    // Create user message with uploaded image URLs
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
       content,
       timestamp: new Date(),
-      images: processedImages.length > 0 ? processedImages.map(img => img.url) : undefined,
+      images: images?.map(img => URL.createObjectURL(img)),
       tools
     };
-    
-    console.log('ChatInterface: Adding user message to chat:', {
-      id: userMessage.id,
-      hasImages: !!userMessage.images,
-      imageCount: userMessage.images?.length || 0
-    });
-    
     setMessages(prev => [...prev, userMessage]);
 
+    // Check if image generation tool is selected OR smart detection
     const isImageGeneration = tools?.includes('Generate Image') || detectImageGeneration(content);
-    const isImageEditing = detectImageEditing(content, processedImages.length > 0);
+    const isImageEditing = imageEditingFile && detectImageEditing(content);
     
     setIsGenerating(true);
     const controller = new AbortController();
     setAbortController(controller);
 
     if (isImageGeneration) {
-      console.log('ChatInterface: Handling image generation');
+      // Handle image generation
       await handleImageGeneration(content, controller);
-    } else if (isImageEditing && processedImages.length > 0) {
-      console.log('ChatInterface: Handling image editing');
-      await handleImageEditingRequest(content, processedImages[0].url, controller);
+    } else if (isImageEditing && imageEditingFile) {
+      // Handle image editing
+      await handleImageEditingRequest(content, imageEditingFile, controller);
     } else {
-      console.log('ChatInterface: Handling regular chat with images:', processedImages.length);
-      // Create assistant message for regular chat
+      // Create AI response message
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
@@ -175,17 +93,10 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
         model: selectedModel,
         isTyping: true
       };
-      
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Generate AI response with image URLs
-      await generateAIResponse(
-        assistantMessage.id, 
-        content, 
-        selectedModel, 
-        controller, 
-        processedImages.map(img => img.url)
-      );
+      // Generate real AI response with images
+      await generateRealAIResponse(assistantMessage.id, content, selectedModel, controller, images);
     }
   };
 
@@ -195,7 +106,9 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       setAbortController(null);
     }
     setIsGenerating(false);
+    setImageEditingFile(null);
 
+    // Mark all typing messages as completed
     setMessages(prev => prev.map(msg => msg.isTyping ? {
       ...msg,
       isTyping: false,
@@ -204,6 +117,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
   };
 
   const handleImageGeneration = async (prompt: string, controller: AbortController) => {
+    // Create AI response message for image generation
     const assistantMessage: Message = {
       id: (Date.now() + 1).toString(),
       type: 'assistant',
@@ -215,34 +129,20 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      console.log('ChatInterface: Generating image with prompt:', prompt);
       const imageUrl = await generateImage(prompt, 'flux-1.1-pro');
       if (controller.signal.aborted) return;
 
-      let finalImageUrl = imageUrl;
-      if (user && imageUrl) {
-        try {
-          const response = await fetch(imageUrl);
-          const blob = await response.blob();
-          const file = new File([blob], `generated-${Date.now()}.png`, { type: 'image/png' });
-          const processedImages = await ImageService.processImageFiles([file], user.uid);
-          finalImageUrl = processedImages[0].url;
-          console.log('ChatInterface: Generated image uploaded:', finalImageUrl);
-        } catch (uploadError) {
-          console.error('ChatInterface: Failed to upload generated image:', uploadError);
-        }
-      }
-
+      // Update message with generated image
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
         ...msg,
         content: `Here's your generated image:`,
-        images: [finalImageUrl],
+        images: [imageUrl],
         tools: ['generate-image'],
         isTyping: false
       } : msg));
     } catch (error) {
       if (controller.signal.aborted) return;
-      console.error('ChatInterface: Error generating image:', error);
+      console.error('Error generating image:', error);
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
         ...msg,
         content: "I'm sorry, I couldn't generate the image. Please try again with a different prompt.",
@@ -254,9 +154,8 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     }
   };
 
-  const handleImageEditingRequest = async (prompt: string, imageUrl: string, controller: AbortController) => {
-    if (!user || !imageUrl) return;
-
+  const handleImageEditingRequest = async (prompt: string, imageFile: File, controller: AbortController) => {
+    // Create AI response message for image editing
     const assistantMessage: Message = {
       id: (Date.now() + 1).toString(),
       type: 'assistant',
@@ -268,30 +167,20 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      const editedImageUrl = await editImage(imageUrl, prompt);
+      const editedImageUrl = await editImage(imageFile, prompt);
       if (controller.signal.aborted) return;
 
-      let finalImageUrl = editedImageUrl;
-      try {
-        const response = await fetch(editedImageUrl);
-        const blob = await response.blob();
-        const file = new File([blob], `edited-${Date.now()}.png`, { type: 'image/png' });
-        const processedImages = await ImageService.processImageFiles([file], user.uid);
-        finalImageUrl = processedImages[0].url;
-      } catch (uploadError) {
-        console.error('ChatInterface: Failed to upload edited image:', uploadError);
-      }
-
+      // Update message with edited image
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
         ...msg,
         content: `Here's your edited image:`,
-        images: [finalImageUrl],
+        images: [editedImageUrl],
         tools: ['edit-image'],
         isTyping: false
       } : msg));
     } catch (error) {
       if (controller.signal.aborted) return;
-      console.error('ChatInterface: Error editing image:', error);
+      console.error('Error editing image:', error);
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
         ...msg,
         content: "I'm sorry, I couldn't edit the image. Please try again with a different prompt.",
@@ -300,37 +189,18 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     } finally {
       setIsGenerating(false);
       setAbortController(null);
+      setImageEditingFile(null);
     }
   };
 
-  const generateAIResponse = async (
-    messageId: string, 
-    userInput: string, 
-    modelId: string, 
-    controller: AbortController, 
-    imageUrls: string[] = []
-  ) => {
+  const generateRealAIResponse = async (messageId: string, userInput: string, modelId: string, controller: AbortController, images?: File[]) => {
     try {
-      console.log('ChatInterface: generateAIResponse called with:', {
-        messageId,
-        modelId,
-        imageCount: imageUrls.length,
-        imageUrls: imageUrls.slice(0, 2) // Log first 2 URLs for debugging
-      });
-      
-      // Build conversation history for context
-      const conversationHistory = messages
-        .filter(msg => !msg.isTyping)
-        .map(msg => ({
-          role: msg.type === 'user' ? 'user' as const : 'assistant' as const,
-          content: msg.content
-        }));
-      
-      // Add current user message
-      conversationHistory.push({ role: 'user' as const, content: userInput });
-      
-      console.log('ChatInterface: Starting AI response stream with images:', imageUrls.length);
-      const stream = generateAIResponseStream(conversationHistory, modelId, webMode, imageUrls);
+      const messages = [{
+        role: 'user' as const,
+        content: userInput
+      }];
+
+      const stream = generateAIResponseStream(messages, modelId, webMode, false, images);
       let fullResponse = '';
 
       for await (const chunk of stream) {
@@ -341,10 +211,10 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
           content: fullResponse,
           isTyping: false
         } : msg));
-        await new Promise(resolve => setTimeout(resolve, 30));
+        await new Promise(resolve => setTimeout(resolve, 30)); // Typing effect
       }
 
-      console.log('ChatInterface: AI response completed');
+      // Final update to ensure typing is stopped
       setMessages(prev => prev.map(msg => msg.id === messageId ? {
         ...msg,
         isTyping: false
@@ -352,7 +222,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       
     } catch (error) {
       if (controller.signal.aborted) return;
-      console.error('ChatInterface: Error generating AI response:', error);
+      console.error('Error generating AI response:', error);
       setMessages(prev => prev.map(msg => msg.id === messageId ? {
         ...msg,
         content: "I'm sorry, I'm experiencing technical difficulties. Please try again.",
@@ -391,6 +261,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     const isImageMessage = currentMessage.tools?.includes('generate-image');
     const modelToUse = newModelId || selectedModel;
 
+    // Reset the assistant message
     setMessages(prev => prev.map(msg => msg.id === messageId ? {
       ...msg,
       content: isImageMessage ? 'Generating image...' : '',
@@ -404,10 +275,12 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     setIsGenerating(true);
 
     if (isImageMessage) {
+      // Regenerate image with new model
       try {
         const imageUrl = await generateImage(userMessage.content, modelToUse);
         if (controller.signal.aborted) return;
 
+        // Update message with new generated image
         setMessages(prev => prev.map(msg => msg.id === messageId ? {
           ...msg,
           content: `Here's your generated image:`,
@@ -427,12 +300,13 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
         } : msg));
       }
     } else {
-      await generateAIResponse(messageId, userMessage.content, modelToUse, controller, userMessage.images || []);
+      await generateRealAIResponse(messageId, userMessage.content, modelToUse, controller);
     }
   };
 
   const startNewChat = () => {
     setMessages([]);
+    setImageEditingFile(null);
   };
 
   const handleTextSelection = () => {
@@ -449,9 +323,13 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
   };
 
   const handleAskCognix = (text: string) => {
+    // Instead of sending directly, we'll pass the text to ChatInput
     setSelectedText("");
+    // Trigger a custom event to set the input value
     window.dispatchEvent(new CustomEvent('setChatInput', {
-      detail: { text: `"${text}"` }
+      detail: {
+        text: `"${text}"`
+      }
     }));
   };
 
@@ -459,9 +337,20 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     setSelectedText("");
   };
 
+  const handleImageEditTrigger = (imageFile: File) => {
+    setImageEditingFile(imageFile);
+    // Trigger custom event to focus chat input for editing prompt
+    window.dispatchEvent(new CustomEvent('setChatInput', {
+      detail: {
+        text: `Edit this image (${imageFile.name}): `
+      }
+    }));
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-6 pb-24" onMouseUp={handleTextSelection}>
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-20 pb-24" onMouseUp={handleTextSelection}>
         {messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">
@@ -494,23 +383,22 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
         ) : (
           <>
             {messages.map(message => (
-              <div key={message.id}>
-                <ChatMessage 
-                  message={message} 
-                  onLike={isLiked => handleLikeMessage(message.id, isLiked)} 
-                  onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} 
-                  onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} 
-                  onExport={() => setIsExportOpen(true)}
-                  onSave={() => saveMessage(message.id)}
-                />
-              </div>
+              <ChatMessage 
+                key={message.id} 
+                message={message} 
+                onLike={isLiked => handleLikeMessage(message.id, isLiked)} 
+                onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} 
+                onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} 
+                onExport={() => setIsExportOpen(true)} 
+              />
             ))}
             <div ref={messagesEndRef} />
           </>
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 border-t border-border bg-background/95 backdrop-blur-sm z-20">
+      {/* Fixed Chat input */}
+      <div className="fixed bottom-0 left-0 md:left-16 right-0 p-4 border-t border-border bg-background/95 backdrop-blur-sm z-20">
         <div className="max-w-6xl mx-auto">
           <ChatInput 
             onSendMessage={handleSendMessage} 
@@ -520,10 +408,18 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
             onWebModeToggle={setWebMode} 
             isGenerating={isGenerating} 
             onStopGeneration={handleStopGeneration}
+            onImageEdit={handleImageEditTrigger}
           />
         </div>
       </div>
 
+      {/* Model selector */}
+      <FloatingModelSelector 
+        selectedModel={selectedModel} 
+        onModelChange={setSelectedModel} 
+      />
+
+      {/* Ask Cognix Popover */}
       <AskCognixPopover 
         selectedText={selectedText} 
         position={popoverPosition} 
@@ -531,6 +427,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
         onClose={closePopover} 
       />
 
+      {/* Export dialog */}
       <ExportDialog 
         isOpen={isExportOpen} 
         onOpenChange={setIsExportOpen} 

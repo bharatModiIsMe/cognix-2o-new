@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { 
   Copy, 
@@ -9,12 +10,8 @@ import {
   User,
   Bot,
   Sparkles,
-  ChevronDown,
-  Volume2,
-  VolumeX,
-  Square
+  ChevronDown
 } from "lucide-react";
-import { useVoiceMode } from "@/hooks/useVoiceMode";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from "@/lib/utils";
@@ -50,22 +47,11 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
-  
-  // Voice mode integration
-  const { state: voiceState, speakText, stopSpeaking } = useVoiceMode();
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleSpeakMessage = () => {
-    if (voiceState.isSpeaking) {
-      stopSpeaking();
-    } else {
-      speakText(message.content);
-    }
   };
 
   const handleTextSelection = () => {
@@ -209,24 +195,6 @@ export function ChatMessage({
             >
               <Copy className="w-4 h-4" />
             </button>
-
-            {/* Voice playback button */}
-            {voiceState.isEnabled && (
-              <button
-                onClick={handleSpeakMessage}
-                className={cn(
-                  "p-2 hover:bg-accent rounded-lg transition-colors",
-                  voiceState.isSpeaking && "text-primary bg-primary/10"
-                )}
-                title={voiceState.isSpeaking ? "Stop speaking" : "Read aloud"}
-              >
-                {voiceState.isSpeaking ? (
-                  <Square className="w-4 h-4" />
-                ) : (
-                  <Volume2 className="w-4 h-4" />
-                )}
-              </button>
-            )}
 
             <button
               onClick={() => onLike(!message.liked)}

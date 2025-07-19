@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { 
   Send, 
@@ -57,7 +56,6 @@ export function ChatInput({
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
   const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
-  const [isMicOn, setIsMicOn] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -136,17 +134,6 @@ export function ChatInput({
         ? prev.filter(id => id !== toolId)
         : [...prev, toolId]
     );
-  };
-
-  const handleMicToggle = () => {
-    setIsMicOn(!isMicOn);
-  };
-
-  const handleStopAI = () => {
-    if (onStopGeneration) {
-      onStopGeneration();
-    }
-    setIsVoiceModeOpen(false);
   };
 
   const adjustTextareaHeight = () => {
@@ -325,12 +312,7 @@ export function ChatInput({
           {/* Voice Mode button */}
           <button
             onClick={() => setIsVoiceModeOpen(true)}
-            className={cn(
-              "p-2 rounded-lg transition-colors",
-              isMicOn 
-                ? "text-green-500 bg-green-500/10 hover:bg-green-500/20" 
-                : "text-muted-foreground hover:bg-accent"
-            )}
+            className="p-2 text-muted-foreground hover:bg-accent rounded-lg transition-colors"
             title="Voice Mode"
             disabled={disabled}
           >
@@ -397,9 +379,6 @@ export function ChatInput({
       <VoiceModeDialog
         isOpen={isVoiceModeOpen}
         onOpenChange={setIsVoiceModeOpen}
-        isMicOn={isMicOn}
-        onMicToggle={handleMicToggle}
-        onStopAI={handleStopAI}
       />
     </div>
   );

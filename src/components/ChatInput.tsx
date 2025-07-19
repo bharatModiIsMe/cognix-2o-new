@@ -36,6 +36,7 @@ interface ChatInputProps {
   onWebModeToggle?: (enabled: boolean) => void;
   isGenerating?: boolean;
   onStopGeneration?: () => void;
+  onImageEdit?: (imageFile: File) => void;
 }
 
 export function ChatInput({ 
@@ -45,7 +46,8 @@ export function ChatInput({
   webMode = false, 
   onWebModeToggle, 
   isGenerating = false, 
-  onStopGeneration
+  onStopGeneration,
+  onImageEdit
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [images, setImages] = useState<File[]>([]);
@@ -118,10 +120,10 @@ export function ChatInput({
   };
 
   const handleImageEdit = (index: number) => {
-    // Instead of opening a dialog, just set a prompt in the input
-    const imageName = images[index]?.name || `image ${index + 1}`;
-    setInput(`Edit this image (${imageName}): `);
-    textareaRef.current?.focus();
+    const imageFile = images[index];
+    if (imageFile && onImageEdit) {
+      onImageEdit(imageFile);
+    }
   };
 
   const toggleTool = (toolId: string) => {

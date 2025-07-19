@@ -4,7 +4,7 @@ import { ChatMessage } from "@/components/ChatMessage";
 import { ExportDialog } from "@/components/ExportDialog";
 import { FloatingModelSelector } from "@/components/FloatingModelSelector";
 import { AskCognixPopover } from "@/components/AskCognixPopover";
-import { generateAIResponseStream, generateImage, AI_MODELS, IMAGE_MODELS } from "@/services/aiService";
+import { generateAIResponseStream, generateImage, editImage, AI_MODELS, IMAGE_MODELS } from "@/services/aiService";
 
 export interface Message {
   id: string;
@@ -31,6 +31,7 @@ export function ChatInterface() {
   const [webMode, setWebMode] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [imageEditingFile, setImageEditingFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const scrollToBottom = () => {
@@ -50,6 +51,13 @@ export function ChatInterface() {
     return imageKeywords.some(keyword => contentLower.includes(keyword));
   };
 
+  // Smart image editing detection
+  const detectImageEditing = (content: string): boolean => {
+    const editKeywords = ['edit this image', 'modify this image', 'change the', 'remove from image', 'add to image', 'convert this image', 'transform this image', 'alter this image'];
+    const contentLower = content.toLowerCase();
+    return editKeywords.some(keyword => contentLower.includes(keyword));
+  };
+
   const handleSendMessage = async (content: string, images?: File[], tools?: string[]) => {
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -63,6 +71,8 @@ export function ChatInterface() {
 
     // Check if image generation tool is selected OR smart detection
     const isImageGeneration = tools?.includes('Generate Image') || detectImageGeneration(content);
+    const isImageEditing = imageEditingFile && detectImageEditing(content);
+    
     setIsGenerating(true);
     const controller = new AbortController();
     setAbortController(controller);
@@ -70,6 +80,9 @@ export function ChatInterface() {
     if (isImageGeneration) {
       // Handle image generation
       await handleImageGeneration(content, controller);
+    } else if (isImageEditing && imageEditingFile) {
+      // Handle image editing
+      await handleImageEditingRequest(content, imageEditingFile, controller);
     } else {
       // Create AI response message
       const assistantMessage: Message = {
@@ -93,6 +106,7 @@ export function ChatInterface() {
       setAbortController(null);
     }
     setIsGenerating(false);
+    setImageEditingFile(null);
 
     // Mark all typing messages as completed
     setMessages(prev => prev.map(msg => msg.isTyping ? {
@@ -137,6 +151,45 @@ export function ChatInterface() {
     } finally {
       setIsGenerating(false);
       setAbortController(null);
+    }
+  };
+
+  const handleImageEditingRequest = async (prompt: string, imageFile: File, controller: AbortController) => {
+    // Create AI response message for image editing
+    const assistantMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      type: 'assistant',
+      content: 'Editing image...',
+      timestamp: new Date(),
+      model: 'flux-kontext-dev',
+      isTyping: true
+    };
+    setMessages(prev => [...prev, assistantMessage]);
+
+    try {
+      const editedImageUrl = await editImage(imageFile, prompt);
+      if (controller.signal.aborted) return;
+
+      // Update message with edited image
+      setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
+        ...msg,
+        content: `Here's your edited image:`,
+        images: [editedImageUrl],
+        tools: ['edit-image'],
+        isTyping: false
+      } : msg));
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error('Error editing image:', error);
+      setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
+        ...msg,
+        content: "I'm sorry, I couldn't edit the image. Please try again with a different prompt.",
+        isTyping: false
+      } : msg));
+    } finally {
+      setIsGenerating(false);
+      setAbortController(null);
+      setImageEditingFile(null);
     }
   };
 
@@ -253,6 +306,7 @@ export function ChatInterface() {
 
   const startNewChat = () => {
     setMessages([]);
+    setImageEditingFile(null);
   };
 
   const handleTextSelection = () => {
@@ -281,6 +335,16 @@ export function ChatInterface() {
 
   const closePopover = () => {
     setSelectedText("");
+  };
+
+  const handleImageEditTrigger = (imageFile: File) => {
+    setImageEditingFile(imageFile);
+    // Trigger custom event to focus chat input for editing prompt
+    window.dispatchEvent(new CustomEvent('setChatInput', {
+      detail: {
+        text: `Edit this image (${imageFile.name}): `
+      }
+    }));
   };
 
   return (
@@ -344,6 +408,7 @@ export function ChatInterface() {
             onWebModeToggle={setWebMode} 
             isGenerating={isGenerating} 
             onStopGeneration={handleStopGeneration}
+            onImageEdit={handleImageEditTrigger}
           />
         </div>
       </div>

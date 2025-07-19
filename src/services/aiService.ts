@@ -42,18 +42,25 @@ export const AI_MODELS: AIModel[] = [
     badge: "Reasoning"
   },
   {
-    id: "claude-sonnet-4",
-    name: "Claude Sonnet 4",
-    apiModel: "provider-1/claude-sonnet-4",
-    description: "Anthropic's balanced model for various tasks",
-    badge: "Balanced"
+    id: "gpt-4o",
+    name: "GPT-4o",
+    apiModel: "provider-6/gpt-4o",
+    description: "OpenAI's powerful multimodal model",
+    badge: "Vision"
   },
   {
-    id: "claude-opus-4",
-    name: "Claude Opus 4",
-    apiModel: "provider-1/claude-opus-4",
-    description: "Anthropic's most capable model",
-    badge: "Ultimate"
+    id: "cognix-2o-reasoning",
+    name: "Cognix-2o Reasoning",
+    apiModel: "provider-1/sonar-reasoning",
+    description: "Advanced reasoning capabilities",
+    badge: "Reasoning"
+  },
+  {
+    id: "gpt-4.1-mini",
+    name: "GPT-4.1 Mini",
+    apiModel: "provider-6/gpt-4.1-mini",
+    description: "Fast and efficient AI model",
+    badge: "Fast"
   }
 ];
 
@@ -210,10 +217,10 @@ export async function generateAIResponse(
       }
     }
 
-    // Prepare messages with images - fix TypeScript types
+    // Prepare messages with images for all models
     const enhancedMessages = messages.map((msg, index) => {
       if (msg.role === 'user' && index === messages.length - 1 && imageUrls.length > 0) {
-        // Add images to the last user message with proper typing
+        // Add images to the last user message for all models
         return {
           role: 'user' as const,
           content: [
@@ -391,7 +398,7 @@ export async function* generateAIResponseStream(
       }
     }
 
-    // Add images to the last user message if provided - fix TypeScript types
+    // Add images to the last user message if provided - works for all models
     if (imageUrls.length > 0 && enhancedMessages.length > 0) {
       const lastMessageIndex = enhancedMessages.length - 1;
       const lastMessage = enhancedMessages[lastMessageIndex];

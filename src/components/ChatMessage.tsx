@@ -10,7 +10,8 @@ import {
   User,
   Bot,
   Sparkles,
-  ChevronDown
+  ChevronDown,
+  Bookmark
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -36,6 +37,7 @@ interface ChatMessageProps {
   onDislike: (isDisliked: boolean) => void;
   onRegenerate: (modelId?: string) => void;
   onExport: () => void;
+  onSave: () => void;
 }
 
 export function ChatMessage({ 
@@ -43,7 +45,8 @@ export function ChatMessage({
   onLike, 
   onDislike, 
   onRegenerate, 
-  onExport 
+  onExport,
+  onSave
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -272,6 +275,14 @@ export function ChatMessage({
                 </>
               )}
             </div>
+
+            <button
+              onClick={onSave}
+              className="p-2 hover:bg-accent rounded-lg transition-colors"
+              title="Save message"
+            >
+              <Bookmark className="w-4 h-4" />
+            </button>
 
             <button
               onClick={onExport}

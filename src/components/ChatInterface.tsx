@@ -5,7 +5,6 @@ import { ExportDialog } from "@/components/ExportDialog";
 import { FloatingModelSelector } from "@/components/FloatingModelSelector";
 import { AskCognixPopover } from "@/components/AskCognixPopover";
 import { generateAIResponseStream, generateImage, editImage, AI_MODELS, IMAGE_MODELS } from "@/services/aiService";
-
 export interface Message {
   id: string;
   type: 'user' | 'assistant';
@@ -18,7 +17,6 @@ export interface Message {
   liked?: boolean;
   disliked?: boolean;
 }
-
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedModel, setSelectedModel] = useState("gemini-2.5-pro");
@@ -33,13 +31,11 @@ export function ChatInterface() {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [imageEditingFile, setImageEditingFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth"
     });
   };
-
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -57,7 +53,6 @@ export function ChatInterface() {
     const contentLower = content.toLowerCase();
     return editKeywords.some(keyword => contentLower.includes(keyword));
   };
-
   const handleSendMessage = async (content: string, images?: File[], tools?: string[]) => {
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -72,11 +67,9 @@ export function ChatInterface() {
     // Check if image generation tool is selected OR smart detection
     const isImageGeneration = tools?.includes('Generate Image') || detectImageGeneration(content);
     const isImageEditing = imageEditingFile && detectImageEditing(content);
-    
     setIsGenerating(true);
     const controller = new AbortController();
     setAbortController(controller);
-
     if (isImageGeneration) {
       // Handle image generation
       await handleImageGeneration(content, controller);
@@ -99,7 +92,6 @@ export function ChatInterface() {
       await generateRealAIResponse(assistantMessage.id, content, selectedModel, controller, images);
     }
   };
-
   const handleStopGeneration = () => {
     if (abortController) {
       abortController.abort();
@@ -115,7 +107,6 @@ export function ChatInterface() {
       content: msg.content || "Response stopped."
     } : msg));
   };
-
   const handleImageGeneration = async (prompt: string, controller: AbortController) => {
     // Create AI response message for image generation
     const assistantMessage: Message = {
@@ -127,7 +118,6 @@ export function ChatInterface() {
       isTyping: true
     };
     setMessages(prev => [...prev, assistantMessage]);
-
     try {
       const imageUrl = await generateImage(prompt, 'flux-1.1-pro');
       if (controller.signal.aborted) return;
@@ -153,7 +143,6 @@ export function ChatInterface() {
       setAbortController(null);
     }
   };
-
   const handleImageEditingRequest = async (prompt: string, imageFile: File, controller: AbortController) => {
     // Create AI response message for image editing
     const assistantMessage: Message = {
@@ -165,7 +154,6 @@ export function ChatInterface() {
       isTyping: true
     };
     setMessages(prev => [...prev, assistantMessage]);
-
     try {
       const editedImageUrl = await editImage(imageFile, prompt);
       if (controller.signal.aborted) return;
@@ -192,17 +180,14 @@ export function ChatInterface() {
       setImageEditingFile(null);
     }
   };
-
   const generateRealAIResponse = async (messageId: string, userInput: string, modelId: string, controller: AbortController, images?: File[]) => {
     try {
       const messages = [{
         role: 'user' as const,
         content: userInput
       }];
-
       const stream = generateAIResponseStream(messages, modelId, webMode, false, images);
       let fullResponse = '';
-
       for await (const chunk of stream) {
         if (controller.signal.aborted) return;
         fullResponse += chunk;
@@ -219,7 +204,6 @@ export function ChatInterface() {
         ...msg,
         isTyping: false
       } : msg));
-      
     } catch (error) {
       if (controller.signal.aborted) return;
       console.error('Error generating AI response:', error);
@@ -233,7 +217,6 @@ export function ChatInterface() {
       setAbortController(null);
     }
   };
-
   const handleLikeMessage = (messageId: string, isLiked: boolean) => {
     setMessages(prev => prev.map(msg => msg.id === messageId ? {
       ...msg,
@@ -241,7 +224,6 @@ export function ChatInterface() {
       disliked: isLiked ? false : msg.disliked
     } : msg));
   };
-
   const handleDislikeMessage = (messageId: string, isDisliked: boolean) => {
     setMessages(prev => prev.map(msg => msg.id === messageId ? {
       ...msg,
@@ -249,15 +231,12 @@ export function ChatInterface() {
       liked: isDisliked ? false : msg.liked
     } : msg));
   };
-
   const handleRegenerateMessage = async (messageId: string, newModelId?: string) => {
     const messageIndex = messages.findIndex(msg => msg.id === messageId);
     if (messageIndex === -1) return;
-
     const userMessage = messages[messageIndex - 1];
     const currentMessage = messages[messageIndex];
     if (!userMessage) return;
-
     const isImageMessage = currentMessage.tools?.includes('generate-image');
     const modelToUse = newModelId || selectedModel;
 
@@ -269,11 +248,9 @@ export function ChatInterface() {
       model: modelToUse,
       images: undefined
     } : msg));
-
     const controller = new AbortController();
     setAbortController(controller);
     setIsGenerating(true);
-
     if (isImageMessage) {
       // Regenerate image with new model
       try {
@@ -303,12 +280,10 @@ export function ChatInterface() {
       await generateRealAIResponse(messageId, userMessage.content, modelToUse, controller);
     }
   };
-
   const startNewChat = () => {
     setMessages([]);
     setImageEditingFile(null);
   };
-
   const handleTextSelection = () => {
     const selection = window.getSelection();
     if (selection && selection.toString().trim()) {
@@ -321,7 +296,6 @@ export function ChatInterface() {
       });
     }
   };
-
   const handleAskCognix = (text: string) => {
     // Instead of sending directly, we'll pass the text to ChatInput
     setSelectedText("");
@@ -332,11 +306,9 @@ export function ChatInterface() {
       }
     }));
   };
-
   const closePopover = () => {
     setSelectedText("");
   };
-
   const handleImageEditTrigger = (imageFile: File) => {
     setImageEditingFile(imageFile);
     // Trigger custom event to focus chat input for editing prompt
@@ -346,94 +318,48 @@ export function ChatInterface() {
       }
     }));
   };
-
-  return (
-    <div className="flex-1 flex flex-col h-full">
+  return <div className="flex-1 flex flex-col h-full">
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-20 pb-24" onMouseUp={handleTextSelection}>
-        {messages.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
+        {messages.length === 0 ? <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">
               <h2 className="text-2xl font-bold mb-2">Welcome to Cognix</h2>
-              <p className="text-muted-foreground mb-6">
-                Your intelligent AI assistant powered by multiple advanced models. Ask anything, upload images, or generate them with AI.
-              </p>
+              <p className="text-muted-foreground mb-6">This is not the final product it may have some errors, and bugs so please report the errors and bugs on this Email-r8devsin@gmail.com.
+
+
+Thank You</p>
               <div className="flex flex-wrap gap-2 justify-center">
-                <button 
-                  onClick={() => handleSendMessage("What are the latest web development trends?")} 
-                  className="px-4 py-2 bg-surface hover:bg-accent rounded-lg text-sm transition-colors"
-                >
+                <button onClick={() => handleSendMessage("What are the latest web development trends?")} className="px-4 py-2 bg-surface hover:bg-accent rounded-lg text-sm transition-colors">
                   Web Development Trends
                 </button>
-                <button 
-                  onClick={() => handleSendMessage("Explain quantum computing")} 
-                  className="px-4 py-2 bg-surface hover:bg-accent rounded-lg text-sm transition-colors"
-                >
+                <button onClick={() => handleSendMessage("Explain quantum computing")} className="px-4 py-2 bg-surface hover:bg-accent rounded-lg text-sm transition-colors">
                   Quantum Computing
                 </button>
-                <button 
-                  onClick={() => handleSendMessage("Help me write a story")} 
-                  className="px-4 py-2 bg-surface hover:bg-accent rounded-lg text-sm transition-colors"
-                >
+                <button onClick={() => handleSendMessage("Help me write a story")} className="px-4 py-2 bg-surface hover:bg-accent rounded-lg text-sm transition-colors">
                   Creative Writing
                 </button>
               </div>
             </div>
-          </div>
-        ) : (
-          <>
-            {messages.map(message => (
-              <ChatMessage 
-                key={message.id} 
-                message={message} 
-                onLike={isLiked => handleLikeMessage(message.id, isLiked)} 
-                onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} 
-                onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} 
-                onExport={() => setIsExportOpen(true)} 
-              />
-            ))}
+          </div> : <>
+            {messages.map(message => <ChatMessage key={message.id} message={message} onLike={isLiked => handleLikeMessage(message.id, isLiked)} onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} onExport={() => setIsExportOpen(true)} />)}
             <div ref={messagesEndRef} />
-          </>
-        )}
+          </>}
       </div>
 
       {/* Fixed Chat input */}
       <div className="fixed bottom-0 left-0 md:left-16 right-0 p-4 border-t border-border bg-background/95 backdrop-blur-sm z-20">
         <div className="max-w-6xl mx-auto">
-          <ChatInput 
-            onSendMessage={handleSendMessage} 
-            onNewChat={startNewChat} 
-            disabled={messages.some(m => m.isTyping)} 
-            webMode={webMode} 
-            onWebModeToggle={setWebMode} 
-            isGenerating={isGenerating} 
-            onStopGeneration={handleStopGeneration}
-            onImageEdit={handleImageEditTrigger}
-          />
+          <ChatInput onSendMessage={handleSendMessage} onNewChat={startNewChat} disabled={messages.some(m => m.isTyping)} webMode={webMode} onWebModeToggle={setWebMode} isGenerating={isGenerating} onStopGeneration={handleStopGeneration} onImageEdit={handleImageEditTrigger} />
         </div>
       </div>
 
       {/* Model selector */}
-      <FloatingModelSelector 
-        selectedModel={selectedModel} 
-        onModelChange={setSelectedModel} 
-      />
+      <FloatingModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
 
       {/* Ask Cognix Popover */}
-      <AskCognixPopover 
-        selectedText={selectedText} 
-        position={popoverPosition} 
-        onAsk={handleAskCognix} 
-        onClose={closePopover} 
-      />
+      <AskCognixPopover selectedText={selectedText} position={popoverPosition} onAsk={handleAskCognix} onClose={closePopover} />
 
       {/* Export dialog */}
-      <ExportDialog 
-        isOpen={isExportOpen} 
-        onOpenChange={setIsExportOpen} 
-        messages={messages} 
-        selectedModel={selectedModel} 
-      />
-    </div>
-  );
+      <ExportDialog isOpen={isExportOpen} onOpenChange={setIsExportOpen} messages={messages} selectedModel={selectedModel} />
+    </div>;
 }

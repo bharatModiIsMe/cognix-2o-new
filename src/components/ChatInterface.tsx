@@ -5,6 +5,9 @@ import { ExportDialog } from "@/components/ExportDialog";
 import { FloatingModelSelector } from "@/components/FloatingModelSelector";
 import { AskCognixPopover } from "@/components/AskCognixPopover";
 import { generateAIResponseStream, generateImage, editImage, AI_MODELS, IMAGE_MODELS } from "@/services/aiService";
+import { saveChatHistory, uploadFile } from "@/services/databaseService";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 export interface Message {
   id: string;
@@ -33,6 +36,8 @@ export function ChatInterface() {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [imageEditingFile, setImageEditingFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
+  const { toast } = useToast();
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({
@@ -43,6 +48,24 @@ export function ChatInterface() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto-save chat history when messages change
+  useEffect(() => {
+    if (messages.length > 0 && user) {
+      const saveHistory = async () => {
+        try {
+          const title = messages[0]?.content.slice(0, 50) + (messages[0]?.content.length > 50 ? '...' : '');
+          await saveChatHistory(user.uid, messages, title);
+        } catch (error) {
+          console.error('Failed to save chat history:', error);
+        }
+      };
+      
+      // Debounce saving
+      const timeoutId = setTimeout(saveHistory, 2000);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [messages, user]);
 
   // Smart image generation detection
   const detectImageGeneration = (content: string): boolean => {
@@ -59,12 +82,38 @@ export function ChatInterface() {
   };
 
   const handleSendMessage = async (content: string, images?: File[], tools?: string[]) => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to use Cognix.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Upload images to Firebase Storage first
+    let uploadedImageUrls: string[] = [];
+    if (images && images.length > 0) {
+      try {
+        const uploadPromises = images.map(image => uploadFile(image, user.uid, 'chat-images'));
+        uploadedImageUrls = await Promise.all(uploadPromises);
+      } catch (error) {
+        console.error('Failed to upload images:', error);
+        toast({
+          title: "Upload Failed",
+          description: "Failed to upload images. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
       content,
       timestamp: new Date(),
-      images: images?.map(img => URL.createObjectURL(img)),
+      images: uploadedImageUrls.length > 0 ? uploadedImageUrls : undefined,
       tools
     };
     setMessages(prev => [...prev, userMessage]);
@@ -132,11 +181,26 @@ export function ChatInterface() {
       const imageUrl = await generateImage(prompt, 'flux-1.1-pro');
       if (controller.signal.aborted) return;
 
+      // Upload generated image to Firebase Storage
+      let finalImageUrl = imageUrl;
+      if (user && imageUrl) {
+        try {
+          // Convert URL to File and upload to Firebase
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          const file = new File([blob], `generated-${Date.now()}.png`, { type: 'image/png' });
+          finalImageUrl = await uploadFile(file, user.uid, 'generated-images');
+        } catch (uploadError) {
+          console.error('Failed to upload generated image:', uploadError);
+          // Continue with original URL if upload fails
+        }
+      }
+
       // Update message with generated image
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
         ...msg,
         content: `Here's your generated image:`,
-        images: [imageUrl],
+        images: [finalImageUrl],
         tools: ['generate-image'],
         isTyping: false
       } : msg));
@@ -155,6 +219,8 @@ export function ChatInterface() {
   };
 
   const handleImageEditingRequest = async (prompt: string, imageFile: File, controller: AbortController) => {
+    if (!user) return;
+
     // Create AI response message for image editing
     const assistantMessage: Message = {
       id: (Date.now() + 1).toString(),
@@ -170,11 +236,23 @@ export function ChatInterface() {
       const editedImageUrl = await editImage(imageFile, prompt);
       if (controller.signal.aborted) return;
 
+      // Upload edited image to Firebase Storage
+      let finalImageUrl = editedImageUrl;
+      try {
+        const response = await fetch(editedImageUrl);
+        const blob = await response.blob();
+        const file = new File([blob], `edited-${Date.now()}.png`, { type: 'image/png' });
+        finalImageUrl = await uploadFile(file, user.uid, 'edited-images');
+      } catch (uploadError) {
+        console.error('Failed to upload edited image:', uploadError);
+        // Continue with original URL if upload fails
+      }
+
       // Update message with edited image
       setMessages(prev => prev.map(msg => msg.id === assistantMessage.id ? {
         ...msg,
         content: `Here's your edited image:`,
-        images: [editedImageUrl],
+        images: [finalImageUrl],
         tools: ['edit-image'],
         isTyping: false
       } : msg));

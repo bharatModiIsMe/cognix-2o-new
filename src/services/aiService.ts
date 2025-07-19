@@ -217,26 +217,34 @@ export async function generateAIResponse(
       }
     }
 
-    // Prepare messages with images for all models
-    const enhancedMessages = messages.map((msg, index) => {
-      if (msg.role === 'user' && index === messages.length - 1 && imageUrls.length > 0) {
-        // Add images to the last user message for all models
+    // Prepare messages with images for vision-capable models
+    let enhancedMessages;
+    
+    if (imageUrls.length > 0) {
+      enhancedMessages = messages.map((msg, index) => {
+        if (msg.role === 'user' && index === messages.length - 1) {
+          return {
+            role: 'user' as const,
+            content: [
+              { type: "text" as const, text: msg.content },
+              ...imageUrls.map(url => ({
+                type: "image_url" as const,
+                image_url: { url }
+              }))
+            ]
+          };
+        }
         return {
-          role: 'user' as const,
-          content: [
-            { type: "text" as const, text: msg.content },
-            ...imageUrls.map(url => ({
-              type: "image_url" as const,
-              image_url: { url }
-            }))
-          ]
+          role: msg.role,
+          content: msg.content
         };
-      }
-      return {
+      });
+    } else {
+      enhancedMessages = messages.map(msg => ({
         role: msg.role,
         content: msg.content
-      };
-    });
+      }));
+    }
 
     const response = await a4fClient.chat.completions.create({
       model: model.apiModel,
@@ -257,36 +265,37 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    const response = await a4fClient.chat.completions.create({
+    const response = await a4fClient.images.generate({
       model: imageModel.apiModel,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
+      prompt: prompt,
+      n: 1,
+      size: "1024x1024"
+    });
+
+    if (response.data && response.data[0] && response.data[0].url) {
+      return response.data[0].url;
+    }
+
+    // Fallback to chat completions if images endpoint doesn't work
+    const chatResponse = await a4fClient.chat.completions.create({
+      model: imageModel.apiModel,
+      messages: [{ role: 'user', content: prompt }],
       stream: false,
     });
 
-    // For image generation, the response content should contain the image URL or data
-    const content = response.choices[0]?.message?.content;
+    const content = chatResponse.choices[0]?.message?.content;
     if (content) {
-      // If the content contains a URL, return it
       if (content.includes('http')) {
         const urlMatch = content.match(/https?:\/\/[^\s]+/);
         if (urlMatch) {
-          console.log('Found image URL:', urlMatch[0]);
           return urlMatch[0];
         }
       }
-      // If it's base64 data, return it
       if (content.startsWith('data:image')) {
-        console.log('Found base64 image');
         return content;
       }
     }
 
-    console.log('Unexpected response structure:', JSON.stringify(response, null, 2));
     throw new Error('No image data found in response');
     
   } catch (error) {
@@ -296,7 +305,7 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
 }
 
 export async function editImage(imageFile: File, prompt: string): Promise<string> {
-  const editModel = IMAGE_EDIT_MODELS[0]; // Use flux-kontext-dev
+  const editModel = IMAGE_EDIT_MODELS[0];
   
   try {
     console.log('Editing image with model:', editModel.apiModel, 'prompt:', prompt);
@@ -321,10 +330,8 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
       stream: false,
     });
 
-    // For image editing, the response content should contain the edited image URL or data
     const content = response.choices[0]?.message?.content;
     if (content) {
-      // If the content contains a URL, return it
       if (content.includes('http')) {
         const urlMatch = content.match(/https?:\/\/[^\s]+/);
         if (urlMatch) {
@@ -332,7 +339,6 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
           return urlMatch[0];
         }
       }
-      // If it's base64 data, return it
       if (content.startsWith('data:image')) {
         console.log('Found edited base64 image');
         return content;
@@ -398,22 +404,30 @@ export async function* generateAIResponseStream(
       }
     }
 
-    // Add images to the last user message if provided - works for all models
+    // Add images to the last user message if provided
+    let finalMessages;
     if (imageUrls.length > 0 && enhancedMessages.length > 0) {
       const lastMessageIndex = enhancedMessages.length - 1;
       const lastMessage = enhancedMessages[lastMessageIndex];
       if (lastMessage.role === 'user') {
-        enhancedMessages[lastMessageIndex] = {
-          role: 'user',
-          content: [
-            { type: "text" as const, text: lastMessage.content },
-            ...imageUrls.map(url => ({
-              type: "image_url" as const,
-              image_url: { url }
-            }))
-          ] as any
-        };
+        finalMessages = [
+          ...enhancedMessages.slice(0, -1),
+          {
+            role: 'user' as const,
+            content: [
+              { type: "text" as const, text: lastMessage.content },
+              ...imageUrls.map(url => ({
+                type: "image_url" as const,
+                image_url: { url }
+              }))
+            ]
+          }
+        ];
+      } else {
+        finalMessages = enhancedMessages;
       }
+    } else {
+      finalMessages = enhancedMessages;
     }
 
     // Enhanced system prompt
@@ -439,7 +453,7 @@ Always provide well-structured, formatted responses that are easy to read and un
       model: model.apiModel,
       messages: [
         { role: 'system', content: systemPrompt },
-        ...enhancedMessages
+        ...finalMessages
       ],
       stream: true,
     };

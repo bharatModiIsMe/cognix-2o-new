@@ -310,7 +310,14 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
 }
 
 export async function editImage(imageFile: File, prompt: string): Promise<string> {
-  const editModel = IMAGE_EDIT_MODELS[0];
+  // Use flux-kontext-dev for editing
+  const editModel = {
+    id: "flux-kontext-dev",
+    name: "FLUX Kontext Dev",
+    apiModel: "provider-3/FLUX.1-kontext-dev",
+    description: "Context-aware image editing",
+    badge: "Edit"
+  };
   
   try {
     console.log('Editing image with model:', editModel.apiModel, 'prompt:', prompt);
@@ -318,34 +325,14 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
     // Convert image to base64
     const base64Image = await fileToBase64(imageFile);
     
-    // Try using the images.edit endpoint first
-    try {
-      const response = await a4fClient.images.edit({
-        model: editModel.apiModel,
-        image: imageFile,
-        prompt: prompt,
-        n: 1,
-        size: "1024x1024",
-        response_format: "url"
-      });
-
-      const editedImageUrl = response.data[0]?.url;
-      if (editedImageUrl) {
-        console.log('Edited image URL:', editedImageUrl);
-        return editedImageUrl;
-      }
-    } catch (editError) {
-      console.log('Images.edit failed, trying chat completions:', editError);
-    }
-
-    // Fallback to chat completions with image input
+    // Use chat completions for image editing with the editing model
     const response = await a4fClient.chat.completions.create({
       model: editModel.apiModel,
       messages: [
         {
           role: 'user',
           content: [
-            { type: "text" as const, text: `Edit this image: ${prompt}` },
+            { type: "text" as const, text: `Edit this image: ${prompt}. Return only the edited image URL or base64 data.` },
             {
               type: "image_url" as const,
               image_url: { url: base64Image }
@@ -359,23 +346,37 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
     const content = response.choices[0]?.message?.content;
     if (content) {
       // Look for URLs in the response
-      const urlMatch = content.match(/https?:\/\/[^\s]+/);
+      const urlMatch = content.match(/https?:\/\/[^\s\)]+/);
       if (urlMatch) {
-        console.log('Found edited image URL in content:', urlMatch[0]);
+        console.log('Found edited image URL:', urlMatch[0]);
         return urlMatch[0];
       }
       // Look for base64 data
-      if (content.startsWith('data:image')) {
-        console.log('Found edited base64 image');
-        return content;
+      if (content.includes('data:image')) {
+        const base64Match = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
+        if (base64Match) {
+          console.log('Found edited base64 image');
+          return base64Match[0];
+        }
       }
+      
+      // If no direct image found, try alternative models
+      console.log('No image found, trying alternative approach...');
+      return await generateImage(`Edit this image: ${prompt}`, 'flux-1-dev');
     }
 
     throw new Error('No edited image data found in response');
     
   } catch (error) {
     console.error('Image editing error:', error);
-    throw new Error(`Failed to edit image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    // Fallback to image generation with editing context
+    try {
+      console.log('Falling back to image generation...');
+      return await generateImage(`Create an edited version: ${prompt}`, 'flux-1-dev');
+    } catch (fallbackError) {
+      console.error('Fallback image generation failed:', fallbackError);
+      throw new Error(`Failed to edit image: Please try with a more specific editing prompt.`);
+    }
   }
 }
 

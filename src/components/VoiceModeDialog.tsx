@@ -16,6 +16,36 @@ interface VoiceModeDialogProps {
   onStopAI: () => void;
 }
 
+// Animated dots component
+function AnimatedDots() {
+  return (
+    <div className="flex items-center justify-center space-x-1 my-4">
+      <div className="relative w-20 h-20">
+        {/* Wavy outline circle */}
+        <div className="absolute inset-0 rounded-full border-4 border-primary/30 animate-pulse"></div>
+        <div className="absolute inset-1 rounded-full border-2 border-primary/20 animate-spin"></div>
+        
+        {/* Moving dots in circular pattern */}
+        <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s' }}>
+          <div className="absolute top-0 left-1/2 w-2 h-2 bg-primary rounded-full -translate-x-1/2 animate-bounce"></div>
+        </div>
+        <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s', animationDelay: '0.5s' }}>
+          <div className="absolute top-1/4 right-0 w-2 h-2 bg-primary/80 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+        </div>
+        <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s', animationDelay: '1s' }}>
+          <div className="absolute bottom-0 left-1/2 w-2 h-2 bg-primary/60 rounded-full -translate-x-1/2 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+        </div>
+        <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s', animationDelay: '1.5s' }}>
+          <div className="absolute top-1/4 left-0 w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '0.6s' }}></div>
+        </div>
+        
+        {/* Center pulsing dot */}
+        <div className="absolute top-1/2 left-1/2 w-3 h-3 bg-primary rounded-full -translate-x-1/2 -translate-y-1/2 animate-pulse"></div>
+      </div>
+    </div>
+  );
+}
+
 export function VoiceModeDialog({ 
   isOpen, 
   onOpenChange, 
@@ -27,8 +57,12 @@ export function VoiceModeDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Voice Mode Controls</DialogTitle>
+          <DialogTitle className="text-center">Voice Mode</DialogTitle>
         </DialogHeader>
+        
+        {/* Animated dots */}
+        <AnimatedDots />
+        
         <div className="flex flex-col gap-4 py-4">
           <button
             onClick={onMicToggle}

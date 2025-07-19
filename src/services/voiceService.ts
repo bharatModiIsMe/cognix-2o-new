@@ -50,9 +50,9 @@ export class VoiceRecorder {
       this.mediaRecorder.start(100); // Collect data every 100ms
       this.isRecording = true;
       
-      console.log('Recording started');
+      console.log('🎤 Recording started');
     } catch (error) {
-      console.error('Error starting recording:', error);
+      console.error('❌ Error starting recording:', error);
       throw new Error('Failed to start recording. Please check microphone permissions.');
     }
   }
@@ -82,6 +82,7 @@ export class VoiceRecorder {
         if (!this.silenceTimer) {
           this.silenceTimer = setTimeout(() => {
             if (this.isRecording && this.onSilenceCallback) {
+              console.log('🔇 Silence detected, stopping recording');
               this.onSilenceCallback();
             }
           }, 3000); // 3 seconds of silence
@@ -108,10 +109,13 @@ export class VoiceRecorder {
         return;
       }
 
+      console.log('⏹️ Stopping recording');
+
       this.mediaRecorder.onstop = () => {
         const audioBlob = new Blob(this.audioChunks, { 
           type: this.mediaRecorder?.mimeType || 'audio/webm' 
         });
+        console.log('📼 Audio blob created, size:', audioBlob.size);
         this.cleanup();
         resolve(audioBlob);
       };
@@ -148,7 +152,7 @@ export class VoiceRecorder {
 
 export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   try {
-    console.log('Transcribing audio...');
+    console.log('🎯 Transcribing audio, size:', audioBlob.size);
     
     // Convert blob to File for the API
     const audioFile = new File([audioBlob], 'audio.webm', { 
@@ -160,17 +164,18 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
       model: 'provider-2/whisper-1',
     });
 
-    console.log('Transcription result:', response.text);
-    return response.text || '';
+    const transcribedText = response.text || '';
+    console.log('✅ Transcription result:', transcribedText);
+    return transcribedText;
   } catch (error) {
-    console.error('Error transcribing audio:', error);
+    console.error('❌ Error transcribing audio:', error);
     throw new Error('Failed to transcribe audio. Please try again.');
   }
 }
 
 export async function synthesizeSpeech(text: string): Promise<ArrayBuffer> {
   try {
-    console.log('Synthesizing speech for:', text.substring(0, 50) + '...');
+    console.log('🗣️ Synthesizing speech for text:', text.substring(0, 100) + '...');
     
     const response = await a4fClient.audio.speech.create({
       model: 'provider-3/tts-1',
@@ -179,9 +184,11 @@ export async function synthesizeSpeech(text: string): Promise<ArrayBuffer> {
       speed: 1.0,
     });
 
-    return await response.arrayBuffer();
+    const audioBuffer = await response.arrayBuffer();
+    console.log('🔊 Speech synthesized, buffer size:', audioBuffer.byteLength);
+    return audioBuffer;
   } catch (error) {
-    console.error('Error synthesizing speech:', error);
+    console.error('❌ Error synthesizing speech:', error);
     throw new Error('Failed to synthesize speech. Please try again.');
   }
 }
@@ -194,10 +201,12 @@ export class AudioPlayer {
 
   async playAudio(audioBuffer: ArrayBuffer, onEnd?: () => void): Promise<void> {
     try {
+      console.log('▶️ Starting audio playback');
+      
       // Stop any currently playing audio
       this.stopAudio();
 
-      this.audioContext = new AudioContext();
+      this.audioContext = new (AudioContext || (window as any).webkitAudioContext)();
       this.gainNode = this.audioContext.createGain();
       this.gainNode.connect(this.audioContext.destination);
 
@@ -206,11 +215,12 @@ export class AudioPlayer {
       this.currentSource.buffer = buffer;
       this.currentSource.connect(this.gainNode);
 
-      // Fade in
+      // Smooth fade in
       this.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
       this.gainNode.gain.linearRampToValueAtTime(1, this.audioContext.currentTime + 0.1);
 
       this.currentSource.onended = () => {
+        console.log('🏁 Audio playback ended');
         this.isPlaying = false;
         if (onEnd) onEnd();
       };
@@ -218,26 +228,36 @@ export class AudioPlayer {
       this.currentSource.start();
       this.isPlaying = true;
       
-      console.log('Audio playback started');
+      console.log('🎵 Audio playback started successfully');
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('❌ Error playing audio:', error);
       throw new Error('Failed to play audio.');
     }
   }
 
   stopAudio(): void {
     if (this.currentSource && this.isPlaying) {
-      // Fade out before stopping
+      console.log('⏹️ Stopping audio playback');
+      
+      // Smooth fade out before stopping
       if (this.gainNode && this.audioContext) {
         this.gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + 0.1);
         setTimeout(() => {
           if (this.currentSource) {
-            this.currentSource.stop();
+            try {
+              this.currentSource.stop();
+            } catch (e) {
+              // Ignore errors when stopping already stopped audio
+            }
             this.currentSource = null;
           }
         }, 100);
       } else {
-        this.currentSource.stop();
+        try {
+          this.currentSource.stop();
+        } catch (e) {
+          // Ignore errors when stopping already stopped audio
+        }
         this.currentSource = null;
       }
       this.isPlaying = false;
@@ -256,9 +276,15 @@ export class AudioPlayer {
 
 export async function processVoiceMessage(text: string): Promise<string> {
   try {
-    console.log('Processing voice message:', text);
+    console.log('🤖 Processing voice message:', text);
     
-    const messages = [{ role: 'user' as const, content: text }];
+    const messages = [{ 
+      role: 'user' as const, 
+      content: `${text}
+
+Please provide a concise, conversational response suitable for voice. Keep it natural and engaging, as this will be spoken aloud. Avoid overly long explanations unless specifically requested.` 
+    }];
+    
     const stream = generateAIResponseStream(messages, "cognix-2o-web", true, false);
     
     let fullResponse = '';
@@ -266,10 +292,10 @@ export async function processVoiceMessage(text: string): Promise<string> {
       fullResponse += chunk;
     }
     
-    console.log('AI response:', fullResponse.substring(0, 100) + '...');
+    console.log('✅ AI response generated:', fullResponse.substring(0, 100) + '...');
     return fullResponse;
   } catch (error) {
-    console.error('Error processing voice message:', error);
+    console.error('❌ Error processing voice message:', error);
     throw new Error('Failed to process voice message. Please try again.');
   }
 }

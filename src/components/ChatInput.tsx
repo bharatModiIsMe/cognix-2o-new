@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,6 @@ interface ChatInputProps {
   isGenerating?: boolean;
   onStopGeneration?: () => void;
   onImageEdit?: (file: File) => void;
-  onVoiceMessage?: (content: string, isUser: boolean) => void;
 }
 
 export function ChatInput({ 
@@ -35,8 +35,7 @@ export function ChatInput({
   onWebModeToggle,
   isGenerating,
   onStopGeneration,
-  onImageEdit,
-  onVoiceMessage
+  onImageEdit
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -203,19 +202,18 @@ export function ChatInput({
         </div>
         
         <div className="flex items-center gap-2">
-          {/* Voice Mode Button */}
+          {/* Voice Mode Button - separate from regular chat */}
           <VoiceModeDialog 
             isOpen={isVoiceModeOpen} 
             onOpenChange={setIsVoiceModeOpen}
-            onVoiceMessage={onVoiceMessage}
           />
           
           <Button
             size="icon"
             variant="outline"
             onClick={() => setIsVoiceModeOpen(true)}
-            className="shrink-0"
-            title="Voice Mode"
+            className="shrink-0 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0"
+            title="Voice Assistant Mode"
           >
             <Mic className="w-4 h-4" />
           </Button>

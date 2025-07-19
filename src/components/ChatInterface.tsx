@@ -34,18 +34,6 @@ export function ChatInterface() {
   const [imageEditingFile, setImageEditingFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleVoiceMessage = useCallback((content: string, isUser: boolean) => {
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      type: isUser ? 'user' : 'assistant',
-      content,
-      timestamp: new Date(),
-      model: isUser ? undefined : 'cognix-2o-web'
-    };
-    
-    setMessages(prev => [...prev, newMessage]);
-  }, []);
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth"
@@ -388,7 +376,6 @@ Thank You</p>
             isGenerating={isGenerating} 
             onStopGeneration={handleStopGeneration} 
             onImageEdit={handleImageEditTrigger}
-            onVoiceMessage={handleVoiceMessage}
           />
         </div>
       </div>

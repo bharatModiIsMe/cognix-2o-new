@@ -81,10 +81,8 @@ export function useVoiceMode() {
 
       // Safety timeout - auto stop after 30 seconds
       timeoutRef.current = setTimeout(() => {
-        if (state.isRecording) {
-          console.log('⏰ Recording timeout reached');
-          stopRecording();
-        }
+        console.log('⏰ Recording timeout reached');
+        stopRecording();
       }, 30000);
 
     } catch (error) {
@@ -96,7 +94,7 @@ export function useVoiceMode() {
         isRecording: false
       });
     }
-  }, [cleanup, state.isRecording]);
+  }, [cleanup, updateState]);
 
   const stopRecording = useCallback(async () => {
     if (!recorderRef.current) {
@@ -190,7 +188,7 @@ export function useVoiceMode() {
         currentStatus: 'Error - Tap to try again'
       });
     }
-  }, [cleanup]);
+  }, [cleanup, updateState]);
 
   const stopAudio = useCallback(() => {
     console.log('🛑 Stopping audio playback');
@@ -202,22 +200,25 @@ export function useVoiceMode() {
         currentStatus: 'Ready' 
       });
     }
-  }, []);
+  }, [updateState]);
 
   const toggleRecording = useCallback(() => {
-    if (state.isRecording) {
-      stopRecording();
-    } else if (!state.isProcessing && !state.isPlaying) {
-      startRecording();
-    }
-  }, [state.isRecording, state.isProcessing, state.isPlaying, startRecording, stopRecording]);
+    setState(currentState => {
+      if (currentState.isRecording) {
+        stopRecording();
+      } else if (!currentState.isProcessing && !currentState.isPlaying) {
+        startRecording();
+      }
+      return currentState;
+    });
+  }, [startRecording, stopRecording]);
 
   const clearError = useCallback(() => {
     updateState({ 
       error: null, 
       currentStatus: 'Ready' 
     });
-  }, []);
+  }, [updateState]);
 
   // Cleanup on unmount
   const reset = useCallback(() => {

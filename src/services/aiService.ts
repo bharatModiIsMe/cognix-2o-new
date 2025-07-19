@@ -1,4 +1,3 @@
-
 import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
 
@@ -364,6 +363,14 @@ export async function* generateAIResponseStream(
   const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
 
   try {
+    console.log('generateAIResponseStream called with:', {
+      modelId,
+      webMode,
+      isImageGeneration,
+      imagesCount: images?.length || 0,
+      messagesCount: messages.length
+    });
+
     // Check if we need to perform web search (automatically or via web mode)
     let searchResults: SearchResult[] = [];
     let enhancedMessages = [...messages];
@@ -398,15 +405,22 @@ export async function* generateAIResponseStream(
     // Convert images to base64 if provided
     const imageUrls: string[] = [];
     if (images && images.length > 0) {
+      console.log('Converting images to base64...');
       for (const image of images) {
-        const base64 = await fileToBase64(image);
-        imageUrls.push(base64);
+        try {
+          const base64 = await fileToBase64(image);
+          imageUrls.push(base64);
+          console.log('Successfully converted image to base64');
+        } catch (error) {
+          console.error('Error converting image to base64:', error);
+        }
       }
     }
 
     // Add images to the last user message if provided
     let finalMessages;
     if (imageUrls.length > 0 && enhancedMessages.length > 0) {
+      console.log('Adding images to user message...');
       const lastMessageIndex = enhancedMessages.length - 1;
       const lastMessage = enhancedMessages[lastMessageIndex];
       if (lastMessage.role === 'user') {
@@ -423,6 +437,7 @@ export async function* generateAIResponseStream(
             ]
           }
         ];
+        console.log('Images added to user message successfully');
       } else {
         finalMessages = enhancedMessages;
       }
@@ -435,9 +450,11 @@ export async function* generateAIResponseStream(
 
 IMPORTANT: You have access to real-time information through web search results when provided. NEVER say "I don't have real-time access" or "I can't provide current information" - you can and do have access through search results.
 
-You can also see and analyze images that users upload. When users share images, describe what you see and help them with any questions about the images.
+You can also see and analyze images that users upload. When users share images, describe what you see and help them with any questions about the images. Be detailed and helpful in your image analysis.
 
 ${isWebSearchTriggered ? '🌐 **Web search was performed** - Use the provided search results to give accurate, current information. Present it naturally as if you knew it directly.' : ''}
+
+${imageUrls.length > 0 ? '🖼️ **Images provided** - Analyze the uploaded images carefully and provide detailed, helpful responses about what you see.' : ''}
 
 Format your responses using markdown:
 - Use **bold** for important terms and emphasis
@@ -458,18 +475,28 @@ Always provide well-structured, formatted responses that are easy to read and un
       stream: true,
     };
 
+    console.log('Making API request to:', model.apiModel);
+    console.log('Request body structure:', {
+      model: requestBody.model,
+      messagesCount: requestBody.messages.length,
+      hasImages: imageUrls.length > 0
+    });
+
     const response = await a4fClient.chat.completions.create(requestBody) as any;
 
     if (response[Symbol.asyncIterator]) {
       // Streaming response
+      console.log('Processing streaming response...');
       for await (const chunk of response) {
         const content = chunk.choices[0]?.delta?.content;
         if (content) {
           yield content;
         }
       }
+      console.log('Streaming response completed');
     } else {
       // Non-streaming response
+      console.log('Processing non-streaming response...');
       const content = response.choices[0]?.message?.content;
       if (content) {
         yield content;

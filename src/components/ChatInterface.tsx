@@ -107,15 +107,23 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       return;
     }
 
-    console.log('Handling send message with images:', images?.length || 0);
+    console.log('handleSendMessage called with:', { content, imagesCount: images?.length || 0, tools });
 
     let uploadedImageUrls: string[] = [];
+    
+    // Handle image uploads first
     if (images && images.length > 0) {
+      console.log('Starting image upload process...');
       try {
-        console.log('Uploading images...');
-        const uploadPromises = images.map(image => uploadFile(image, user.uid, 'chat-images'));
+        const uploadPromises = images.map(async (image, index) => {
+          console.log(`Uploading image ${index + 1}:`, image.name);
+          const url = await uploadFile(image, user.uid, 'chat-images');
+          console.log(`Image ${index + 1} uploaded successfully:`, url);
+          return url;
+        });
+        
         uploadedImageUrls = await Promise.all(uploadPromises);
-        console.log('Images uploaded:', uploadedImageUrls);
+        console.log('All images uploaded successfully:', uploadedImageUrls);
       } catch (error) {
         console.error('Failed to upload images:', error);
         toast({
@@ -127,6 +135,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       }
     }
 
+    // Create user message
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
@@ -136,7 +145,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
       tools
     };
     
-    console.log('Adding user message:', userMessage);
+    console.log('Adding user message to chat:', userMessage);
     setMessages(prev => [...prev, userMessage]);
 
     const isImageGeneration = tools?.includes('Generate Image') || detectImageGeneration(content);
@@ -151,6 +160,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     } else if (isImageEditing && images && images.length > 0) {
       await handleImageEditingRequest(content, images[0], controller);
     } else {
+      // Create assistant message for regular chat
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
@@ -159,8 +169,11 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
         model: selectedModel,
         isTyping: true
       };
+      
+      console.log('Adding assistant message for regular chat');
       setMessages(prev => [...prev, assistantMessage]);
 
+      // Pass the images directly to the AI response generation
       await generateRealAIResponse(assistantMessage.id, content, selectedModel, controller, images);
     }
   };
@@ -191,6 +204,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
+      console.log('Generating image with prompt:', prompt);
       const imageUrl = await generateImage(prompt, 'flux-1.1-pro');
       if (controller.signal.aborted) return;
 
@@ -201,6 +215,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
           const blob = await response.blob();
           const file = new File([blob], `generated-${Date.now()}.png`, { type: 'image/png' });
           finalImageUrl = await uploadFile(file, user.uid, 'generated-images');
+          console.log('Generated image uploaded:', finalImageUrl);
         } catch (uploadError) {
           console.error('Failed to upload generated image:', uploadError);
         }
@@ -277,9 +292,21 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
 
   const generateRealAIResponse = async (messageId: string, userInput: string, modelId: string, controller: AbortController, images?: File[]) => {
     try {
-      console.log('Generating AI response with images:', images?.length || 0);
-      const messages = [{ role: 'user' as const, content: userInput }];
-      const stream = generateAIResponseStream(messages, modelId, webMode, false, images);
+      console.log('generateRealAIResponse called with images:', images?.length || 0);
+      
+      // Build conversation history for context
+      const conversationHistory = messages
+        .filter(msg => !msg.isTyping)
+        .map(msg => ({
+          role: msg.type === 'user' ? 'user' as const : 'assistant' as const,
+          content: msg.content
+        }));
+      
+      // Add current user message
+      conversationHistory.push({ role: 'user' as const, content: userInput });
+      
+      console.log('Starting AI response stream with images:', images?.length || 0);
+      const stream = generateAIResponseStream(conversationHistory, modelId, webMode, false, images);
       let fullResponse = '';
 
       for await (const chunk of stream) {
@@ -293,6 +320,7 @@ export function ChatInterface({ selectedModel, onModelChange }: ChatInterfacePro
         await new Promise(resolve => setTimeout(resolve, 30));
       }
 
+      console.log('AI response completed');
       setMessages(prev => prev.map(msg => msg.id === messageId ? {
         ...msg,
         isTyping: false

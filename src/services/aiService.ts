@@ -210,23 +210,26 @@ export async function generateAIResponse(
       }
     }
 
-    // Prepare messages with images
-    const enhancedMessages = await Promise.all(messages.map(async (msg, index) => {
+    // Prepare messages with images - fix TypeScript types
+    const enhancedMessages = messages.map((msg, index) => {
       if (msg.role === 'user' && index === messages.length - 1 && imageUrls.length > 0) {
-        // Add images to the last user message
+        // Add images to the last user message with proper typing
         return {
-          role: msg.role,
+          role: 'user' as const,
           content: [
-            { type: "text", text: msg.content },
+            { type: "text" as const, text: msg.content },
             ...imageUrls.map(url => ({
-              type: "image_url",
+              type: "image_url" as const,
               image_url: { url }
             }))
           ]
         };
       }
-      return msg;
-    }));
+      return {
+        role: msg.role,
+        content: msg.content
+      };
+    });
 
     const response = await a4fClient.chat.completions.create({
       model: model.apiModel,
@@ -247,45 +250,94 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    const response = await fetch(`${a4fBaseUrl}/images/generations`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${a4fApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: imageModel.apiModel,
-        prompt: prompt,
-        n: 1,
-        size: "1024x1024",
-        quality: "standard",
-        response_format: "url"
-      }),
+    const response = await a4fClient.chat.completions.create({
+      model: imageModel.apiModel,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      stream: false,
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    // For image generation, the response content should contain the image URL or data
+    const content = response.choices[0]?.message?.content;
+    if (content) {
+      // If the content contains a URL, return it
+      if (content.includes('http')) {
+        const urlMatch = content.match(/https?:\/\/[^\s]+/);
+        if (urlMatch) {
+          console.log('Found image URL:', urlMatch[0]);
+          return urlMatch[0];
+        }
+      }
+      // If it's base64 data, return it
+      if (content.startsWith('data:image')) {
+        console.log('Found base64 image');
+        return content;
+      }
     }
 
-    const data = await response.json();
-    console.log('Image generation response:', data);
-
-    if (data.data && data.data[0] && data.data[0].url) {
-      console.log('Found image URL:', data.data[0].url);
-      return data.data[0].url;
-    }
-
-    if (data.data && data.data[0] && data.data[0].b64_json) {
-      console.log('Found base64 image');
-      return `data:image/png;base64,${data.data[0].b64_json}`;
-    }
-
-    console.log('Unexpected response structure:', JSON.stringify(data, null, 2));
+    console.log('Unexpected response structure:', JSON.stringify(response, null, 2));
     throw new Error('No image data found in response');
     
   } catch (error) {
     console.error('Image generation error:', error);
     throw new Error(`Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+export async function editImage(imageFile: File, prompt: string): Promise<string> {
+  const editModel = IMAGE_EDIT_MODELS[0]; // Use flux-kontext-dev
+  
+  try {
+    console.log('Editing image with model:', editModel.apiModel, 'prompt:', prompt);
+    
+    // Convert image to base64
+    const base64Image = await fileToBase64(imageFile);
+    
+    const response = await a4fClient.chat.completions.create({
+      model: editModel.apiModel,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: "text" as const, text: `Edit this image: ${prompt}` },
+            {
+              type: "image_url" as const,
+              image_url: { url: base64Image }
+            }
+          ]
+        }
+      ],
+      stream: false,
+    });
+
+    // For image editing, the response content should contain the edited image URL or data
+    const content = response.choices[0]?.message?.content;
+    if (content) {
+      // If the content contains a URL, return it
+      if (content.includes('http')) {
+        const urlMatch = content.match(/https?:\/\/[^\s]+/);
+        if (urlMatch) {
+          console.log('Found edited image URL:', urlMatch[0]);
+          return urlMatch[0];
+        }
+      }
+      // If it's base64 data, return it
+      if (content.startsWith('data:image')) {
+        console.log('Found edited base64 image');
+        return content;
+      }
+    }
+
+    console.log('Unexpected edit response structure:', JSON.stringify(response, null, 2));
+    throw new Error('No edited image data found in response');
+    
+  } catch (error) {
+    console.error('Image editing error:', error);
+    throw new Error(`Failed to edit image: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -339,7 +391,7 @@ export async function* generateAIResponseStream(
       }
     }
 
-    // Add images to the last user message if provided
+    // Add images to the last user message if provided - fix TypeScript types
     if (imageUrls.length > 0 && enhancedMessages.length > 0) {
       const lastMessageIndex = enhancedMessages.length - 1;
       const lastMessage = enhancedMessages[lastMessageIndex];
@@ -347,12 +399,12 @@ export async function* generateAIResponseStream(
         enhancedMessages[lastMessageIndex] = {
           role: 'user',
           content: [
-            { type: "text", text: lastMessage.content },
+            { type: "text" as const, text: lastMessage.content },
             ...imageUrls.map(url => ({
-              type: "image_url",
+              type: "image_url" as const,
               image_url: { url }
             }))
-          ]
+          ] as any
         };
       }
     }

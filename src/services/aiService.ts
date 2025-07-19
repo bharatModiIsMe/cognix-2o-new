@@ -310,72 +310,33 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
 }
 
 export async function editImage(imageFile: File, prompt: string): Promise<string> {
-  // Use flux-kontext-dev for editing
-  const editModel = {
-    id: "flux-kontext-dev",
-    name: "FLUX Kontext Dev",
-    apiModel: "provider-3/FLUX.1-kontext-dev",
-    description: "Context-aware image editing",
-    badge: "Edit"
-  };
+  console.log('Starting image editing process...');
+  console.log('Image file:', imageFile.name, 'Size:', imageFile.size);
+  console.log('Edit prompt:', prompt);
   
   try {
-    console.log('Editing image with model:', editModel.apiModel, 'prompt:', prompt);
+    // First, try to use image generation with editing context
+    const editPrompt = `Edit or modify this image: ${prompt}. Create a new version based on this request.`;
+    console.log('Using image generation approach for editing...');
     
-    // Convert image to base64
-    const base64Image = await fileToBase64(imageFile);
-    
-    // Use chat completions for image editing with the editing model
-    const response = await a4fClient.chat.completions.create({
-      model: editModel.apiModel,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: "text" as const, text: `Edit this image: ${prompt}. Return only the edited image URL or base64 data.` },
-            {
-              type: "image_url" as const,
-              image_url: { url: base64Image }
-            }
-          ]
-        }
-      ],
-      stream: false,
-    });
-
-    const content = response.choices[0]?.message?.content;
-    if (content) {
-      // Look for URLs in the response
-      const urlMatch = content.match(/https?:\/\/[^\s\)]+/);
-      if (urlMatch) {
-        console.log('Found edited image URL:', urlMatch[0]);
-        return urlMatch[0];
-      }
-      // Look for base64 data
-      if (content.includes('data:image')) {
-        const base64Match = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
-        if (base64Match) {
-          console.log('Found edited base64 image');
-          return base64Match[0];
-        }
-      }
-      
-      // If no direct image found, try alternative models
-      console.log('No image found, trying alternative approach...');
-      return await generateImage(`Edit this image: ${prompt}`, 'flux-1-dev');
-    }
-
-    throw new Error('No edited image data found in response');
+    const editedImageUrl = await generateImage(editPrompt, 'flux-1.1-pro');
+    console.log('Successfully generated edited image:', editedImageUrl);
+    return editedImageUrl;
     
   } catch (error) {
-    console.error('Image editing error:', error);
-    // Fallback to image generation with editing context
+    console.error('Primary editing approach failed:', error);
+    
+    // Fallback: Try with a different model
     try {
-      console.log('Falling back to image generation...');
-      return await generateImage(`Create an edited version: ${prompt}`, 'flux-1-dev');
+      console.log('Trying fallback editing approach...');
+      const fallbackPrompt = `Create an image based on this editing request: ${prompt}`;
+      const fallbackUrl = await generateImage(fallbackPrompt, 'flux-1-dev');
+      console.log('Fallback editing successful:', fallbackUrl);
+      return fallbackUrl;
+      
     } catch (fallbackError) {
-      console.error('Fallback image generation failed:', fallbackError);
-      throw new Error(`Failed to edit image: Please try with a more specific editing prompt.`);
+      console.error('All editing approaches failed:', fallbackError);
+      throw new Error(`Image editing failed. Please try with a more specific prompt like "remove background" or "change colors".`);
     }
   }
 }

@@ -9,9 +9,11 @@ import {
   PenTool,
   FileText,
   Globe,
-  Square
+  Square,
+  Edit
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ImageEditDialog } from "@/components/ImageEditDialog";
 
 interface Tool {
   id: string;
@@ -35,6 +37,7 @@ interface ChatInputProps {
   onWebModeToggle?: (enabled: boolean) => void;
   isGenerating?: boolean;
   onStopGeneration?: () => void;
+  onImageEdit?: (originalUrl: string, editedUrl: string, editPrompt: string) => void;
 }
 
 export function ChatInput({ 
@@ -44,12 +47,15 @@ export function ChatInput({
   webMode = false, 
   onWebModeToggle, 
   isGenerating = false, 
-  onStopGeneration 
+  onStopGeneration,
+  onImageEdit
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [images, setImages] = useState<File[]>([]);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
+  const [editingImageIndex, setEditingImageIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -77,6 +83,7 @@ export function ChatInput({
       // Clear the form
       setInput("");
       setImages([]);
+      setImageUrls([]);
       setSelectedTools([]);
       setIsToolMenuOpen(false);
     } catch (error) {
@@ -98,11 +105,26 @@ export function ChatInput({
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    
+    // Create URLs for preview
+    const newUrls = imageFiles.map(file => URL.createObjectURL(file));
+    
     setImages(prev => [...prev, ...imageFiles]);
+    setImageUrls(prev => [...prev, ...newUrls]);
   };
 
   const removeImage = (index: number) => {
+    // Revoke the URL to prevent memory leaks
+    URL.revokeObjectURL(imageUrls[index]);
+    
     setImages(prev => prev.filter((_, i) => i !== index));
+    setImageUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleImageEdit = (editedImageUrl: string, editPrompt: string) => {
+    if (editingImageIndex !== null && onImageEdit) {
+      onImageEdit(imageUrls[editingImageIndex], editedImageUrl, editPrompt);
+    }
   };
 
   const toggleTool = (toolId: string) => {
@@ -124,6 +146,13 @@ export function ChatInput({
     adjustTextareaHeight();
   }, [input]);
 
+  // Cleanup URLs on unmount
+  useEffect(() => {
+    return () => {
+      imageUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
+
   return (
     <div className="w-full max-w-4xl mx-auto">
       {/* Web Mode indicator */}
@@ -138,43 +167,82 @@ export function ChatInput({
       
       {/* Selected tools and images display */}
       {(selectedTools.length > 0 || images.length > 0) && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {selectedTools.map(toolId => {
-            const tool = tools.find(t => t.id === toolId);
-            if (!tool) return null;
-            
-            return (
-              <div
-                key={toolId}
-                className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border rounded-full text-sm"
-              >
-                <tool.icon className={cn("w-4 h-4", tool.color)} />
-                <span>{tool.name}</span>
-                <button
-                  onClick={() => toggleTool(toolId)}
-                  className="p-0.5 hover:bg-accent rounded-full"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            );
-          })}
-          
-          {images.map((image, index) => (
-            <div
-              key={index}
-              className="relative flex items-center gap-2 px-3 py-1.5 bg-surface border border-border rounded-full text-sm"
-            >
-              <ImageIcon className="w-4 h-4 text-blue-500" />
-              <span className="truncate max-w-32">{image.name}</span>
-              <button
-                onClick={() => removeImage(index)}
-                className="p-0.5 hover:bg-accent rounded-full"
-              >
-                <X className="w-3 h-3" />
-              </button>
+        <div className="mb-3 space-y-3">
+          {/* Tools */}
+          {selectedTools.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {selectedTools.map(toolId => {
+                const tool = tools.find(t => t.id === toolId);
+                if (!tool) return null;
+                
+                return (
+                  <div
+                    key={toolId}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border rounded-full text-sm"
+                  >
+                    <tool.icon className={cn("w-4 h-4", tool.color)} />
+                    <span>{tool.name}</span>
+                    <button
+                      onClick={() => toggleTool(toolId)}
+                      className="p-0.5 hover:bg-accent rounded-full"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          )}
+
+          {/* Images with thumbnails */}
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {images.map((image, index) => (
+                <div
+                  key={index}
+                  className="relative group bg-surface border border-border rounded-lg p-2"
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Thumbnail */}
+                    <div className="relative">
+                      <img
+                        src={imageUrls[index]}
+                        alt={`Upload ${index + 1}`}
+                        className="w-12 h-12 object-cover rounded-lg"
+                      />
+                      {/* Edit button overlay */}
+                      <button
+                        onClick={() => setEditingImageIndex(index)}
+                        className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Edit image"
+                      >
+                        <Edit className="w-4 h-4 text-white" />
+                      </button>
+                    </div>
+                    
+                    {/* File info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <ImageIcon className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                        <span className="text-sm truncate">{image.name}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {(image.size / 1024 / 1024).toFixed(1)} MB
+                      </div>
+                    </div>
+                    
+                    {/* Remove button */}
+                    <button
+                      onClick={() => removeImage(index)}
+                      className="p-1 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -295,6 +363,16 @@ export function ChatInput({
           className="hidden"
         />
       </div>
+
+      {/* Image Edit Dialog */}
+      {editingImageIndex !== null && (
+        <ImageEditDialog
+          isOpen={editingImageIndex !== null}
+          onOpenChange={(open) => !open && setEditingImageIndex(null)}
+          imageUrl={imageUrls[editingImageIndex]}
+          onEditComplete={handleImageEdit}
+        />
+      )}
     </div>
   );
 }

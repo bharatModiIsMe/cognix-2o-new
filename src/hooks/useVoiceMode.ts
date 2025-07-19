@@ -22,12 +22,15 @@ export function useVoiceMode() {
   const recorderRef = useRef<VoiceRecorder | null>(null);
   const playerRef = useRef<AudioPlayer | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isProcessingRef = useRef(false);
 
   const updateState = useCallback((updates: Partial<VoiceModeState>) => {
     setState(prev => ({ ...prev, ...updates }));
   }, []);
 
   const cleanup = useCallback(() => {
+    console.log('🧹 Cleaning up voice mode...');
+    
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -52,12 +55,19 @@ export function useVoiceMode() {
       }
       playerRef.current = null;
     }
+
+    isProcessingRef.current = false;
   }, []);
 
   const startRecording = useCallback(async () => {
+    if (isProcessingRef.current) {
+      console.log('⚠️ Already processing, ignoring start recording');
+      return;
+    }
+
     try {
       console.log('🎤 Starting recording process...');
-      cleanup(); // Clean up any previous session
+      cleanup();
       
       updateState({ 
         error: null, 
@@ -71,7 +81,9 @@ export function useVoiceMode() {
       
       await recorderRef.current.startRecording(() => {
         console.log('🔇 Auto-stop triggered by silence');
-        stopRecording();
+        if (!isProcessingRef.current) {
+          stopRecording();
+        }
       });
 
       updateState({ 
@@ -79,10 +91,12 @@ export function useVoiceMode() {
         currentStatus: 'Listening... Speak now!' 
       });
 
-      // Safety timeout - auto stop after 30 seconds
+      // Safety timeout
       timeoutRef.current = setTimeout(() => {
         console.log('⏰ Recording timeout reached');
-        stopRecording();
+        if (!isProcessingRef.current) {
+          stopRecording();
+        }
       }, 30000);
 
     } catch (error) {
@@ -97,13 +111,14 @@ export function useVoiceMode() {
   }, [cleanup, updateState]);
 
   const stopRecording = useCallback(async () => {
-    if (!recorderRef.current) {
-      console.warn('No recorder to stop');
+    if (!recorderRef.current || isProcessingRef.current) {
+      console.warn('No recorder to stop or already processing');
       return;
     }
 
     try {
       console.log('⏹️ Stopping recording...');
+      isProcessingRef.current = true;
       
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
@@ -119,12 +134,13 @@ export function useVoiceMode() {
       const audioBlob = await recorderRef.current.stopRecording();
       recorderRef.current = null;
       
-      if (audioBlob.size < 1000) {
+      if (audioBlob.size < 500) {
         updateState({ 
           isProcessing: false,
           error: 'Recording too short. Please speak for at least 1 second.',
           currentStatus: 'Ready'
         });
+        isProcessingRef.current = false;
         return;
       }
 
@@ -138,6 +154,7 @@ export function useVoiceMode() {
           error: 'No speech detected. Please try speaking more clearly.',
           currentStatus: 'Ready'
         });
+        isProcessingRef.current = false;
         return;
       }
 
@@ -153,6 +170,7 @@ export function useVoiceMode() {
           error: 'AI response was empty. Please try again.',
           currentStatus: 'Ready'
         });
+        isProcessingRef.current = false;
         return;
       }
 
@@ -176,6 +194,7 @@ export function useVoiceMode() {
           currentStatus: 'Ready - Tap to speak again!' 
         });
         playerRef.current = null;
+        isProcessingRef.current = false;
       });
 
     } catch (error) {
@@ -187,6 +206,7 @@ export function useVoiceMode() {
         error: error instanceof Error ? error.message : 'Voice processing failed',
         currentStatus: 'Error - Tap to try again'
       });
+      isProcessingRef.current = false;
     }
   }, [cleanup, updateState]);
 
@@ -200,13 +220,14 @@ export function useVoiceMode() {
         currentStatus: 'Ready' 
       });
     }
+    isProcessingRef.current = false;
   }, [updateState]);
 
   const toggleRecording = useCallback(() => {
     setState(currentState => {
       if (currentState.isRecording) {
         stopRecording();
-      } else if (!currentState.isProcessing && !currentState.isPlaying) {
+      } else if (!currentState.isProcessing && !currentState.isPlaying && !isProcessingRef.current) {
         startRecording();
       }
       return currentState;
@@ -220,7 +241,6 @@ export function useVoiceMode() {
     });
   }, [updateState]);
 
-  // Cleanup on unmount
   const reset = useCallback(() => {
     console.log('🔄 Resetting voice mode');
     cleanup();

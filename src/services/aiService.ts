@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
+import { editImageWithContext } from './imageEditService';
 
 const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
 const a4fBaseUrl = 'https://api.a4f.co/v1';
@@ -310,34 +311,15 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
 }
 
 export async function editImage(imageFile: File, prompt: string): Promise<string> {
-  console.log('Starting image editing process...');
+  console.log('🖼️ Starting image editing process...');
   console.log('Image file:', imageFile.name, 'Size:', imageFile.size);
   console.log('Edit prompt:', prompt);
   
   try {
-    // First, try to use image generation with editing context
-    const editPrompt = `Edit or modify this image: ${prompt}. Create a new version based on this request.`;
-    console.log('Using image generation approach for editing...');
-    
-    const editedImageUrl = await generateImage(editPrompt, 'flux-1.1-pro');
-    console.log('Successfully generated edited image:', editedImageUrl);
-    return editedImageUrl;
-    
+    return await editImageWithContext(imageFile, prompt);
   } catch (error) {
-    console.error('Primary editing approach failed:', error);
-    
-    // Fallback: Try with a different model
-    try {
-      console.log('Trying fallback editing approach...');
-      const fallbackPrompt = `Create an image based on this editing request: ${prompt}`;
-      const fallbackUrl = await generateImage(fallbackPrompt, 'flux-1-dev');
-      console.log('Fallback editing successful:', fallbackUrl);
-      return fallbackUrl;
-      
-    } catch (fallbackError) {
-      console.error('All editing approaches failed:', fallbackError);
-      throw new Error(`Image editing failed. Please try with a more specific prompt like "remove background" or "change colors".`);
-    }
+    console.error('❌ Image editing failed:', error);
+    throw new Error(`Image editing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 

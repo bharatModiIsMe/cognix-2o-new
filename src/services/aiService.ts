@@ -1,3 +1,4 @@
+
 import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
 
@@ -84,6 +85,55 @@ export const IMAGE_MODELS: AIModel[] = [
     apiModel: "provider-1/FLUX.1-schnell",
     description: "Quick image generation",
     badge: "Quick"
+  },
+  {
+    id: "flux-1-schnell-v2",
+    name: "Flux.1-schnell-v2",
+    apiModel: "provider-2/FLUX.1-schnell-v2",
+    description: "Latest quick image generation",
+    badge: "Quick"
+  },
+  {
+    id: "imagen-4",
+    name: "Imagen-4",
+    apiModel: "provider-4/imagen-4",
+    description: "Google's latest image model",
+    badge: "Google"
+  },
+  {
+    id: "imagen-3",
+    name: "Imagen-3",
+    apiModel: "provider-4/imagen-3",
+    description: "Google's image generation",
+    badge: "Google"
+  },
+  {
+    id: "flux-1-dev",
+    name: "Flux.1-dev",
+    apiModel: "provider-3/FLUX.1-dev",
+    description: "Development version of Flux",
+    badge: "Dev"
+  },
+  {
+    id: "flux-kontext-pro",
+    name: "FLUX Kontext Pro",
+    apiModel: "provider-1/FLUX.1-kontext-pro",
+    description: "Context-aware image generation",
+    badge: "Pro"
+  },
+  {
+    id: "imagen-3.0-generate-002",
+    name: "Imagen 3.0 Gen 002",
+    apiModel: "provider-3/imagen-3.0-generate-002",
+    description: "Imagen 3.0 generation model",
+    badge: "Gen"
+  },
+  {
+    id: "imagen-4.0-generate-preview",
+    name: "Imagen 4.0 Preview",
+    apiModel: "provider-3/imagen-4.0-generate-preview-06-06",
+    description: "Imagen 4.0 preview model",
+    badge: "Preview"
   }
 ];
 
@@ -133,16 +183,54 @@ function needsWebSearch(query: string): boolean {
   return webSearchTriggers.some(trigger => trigger.test(query));
 }
 
+// Helper function to convert File to base64
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = error => reject(error);
+  });
+}
+
 export async function generateAIResponse(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
-  modelId: string
+  modelId: string,
+  images?: File[]
 ): Promise<string> {
   const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
 
   try {
+    // Convert images to base64 if provided
+    const imageUrls: string[] = [];
+    if (images && images.length > 0) {
+      for (const image of images) {
+        const base64 = await fileToBase64(image);
+        imageUrls.push(base64);
+      }
+    }
+
+    // Prepare messages with images
+    const enhancedMessages = await Promise.all(messages.map(async (msg, index) => {
+      if (msg.role === 'user' && index === messages.length - 1 && imageUrls.length > 0) {
+        // Add images to the last user message
+        return {
+          role: msg.role,
+          content: [
+            { type: "text", text: msg.content },
+            ...imageUrls.map(url => ({
+              type: "image_url",
+              image_url: { url }
+            }))
+          ]
+        };
+      }
+      return msg;
+    }));
+
     const response = await a4fClient.chat.completions.create({
       model: model.apiModel,
-      messages,
+      messages: enhancedMessages,
       stream: false,
     });
 
@@ -201,53 +289,12 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   }
 }
 
-export async function editImage(imageUrl: string, editPrompt: string, modelId: string = "flux-kontext-dev"): Promise<string> {
-  const editModel = IMAGE_EDIT_MODELS.find(m => m.id === modelId) || IMAGE_EDIT_MODELS[0];
-  
-  try {
-    console.log('Editing image with model:', editModel.apiModel, 'prompt:', editPrompt);
-    
-    const response = await a4fClient.chat.completions.create({
-      model: editModel.apiModel,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: editPrompt
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: imageUrl
-              }
-            }
-          ]
-        }
-      ],
-    });
-
-    const content = response.choices[0]?.message?.content;
-    if (content) {
-      // For now, return the original image URL as the editing API might return text
-      // In a real implementation, this would return the edited image URL
-      return imageUrl;
-    }
-
-    throw new Error('No edited image returned');
-    
-  } catch (error) {
-    console.error('Image editing error:', error);
-    throw new Error(`Failed to edit image: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
 export async function* generateAIResponseStream(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   modelId: string,
   webMode: boolean = false,
-  isImageGeneration: boolean = false
+  isImageGeneration: boolean = false,
+  images?: File[]
 ): AsyncGenerator<string, void, unknown> {
   const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
 
@@ -283,10 +330,39 @@ export async function* generateAIResponseStream(
       }
     }
 
+    // Convert images to base64 if provided
+    const imageUrls: string[] = [];
+    if (images && images.length > 0) {
+      for (const image of images) {
+        const base64 = await fileToBase64(image);
+        imageUrls.push(base64);
+      }
+    }
+
+    // Add images to the last user message if provided
+    if (imageUrls.length > 0 && enhancedMessages.length > 0) {
+      const lastMessageIndex = enhancedMessages.length - 1;
+      const lastMessage = enhancedMessages[lastMessageIndex];
+      if (lastMessage.role === 'user') {
+        enhancedMessages[lastMessageIndex] = {
+          role: 'user',
+          content: [
+            { type: "text", text: lastMessage.content },
+            ...imageUrls.map(url => ({
+              type: "image_url",
+              image_url: { url }
+            }))
+          ]
+        };
+      }
+    }
+
     // Enhanced system prompt
-    const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities.
+    const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities and image understanding.
 
 IMPORTANT: You have access to real-time information through web search results when provided. NEVER say "I don't have real-time access" or "I can't provide current information" - you can and do have access through search results.
+
+You can also see and analyze images that users upload. When users share images, describe what you see and help them with any questions about the images.
 
 ${isWebSearchTriggered ? '🌐 **Web search was performed** - Use the provided search results to give accurate, current information. Present it naturally as if you knew it directly.' : ''}
 

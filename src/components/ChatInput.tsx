@@ -13,7 +13,6 @@ import {
   Edit
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ImageEditDialog } from "@/components/ImageEditDialog";
 
 interface Tool {
   id: string;
@@ -37,7 +36,6 @@ interface ChatInputProps {
   onWebModeToggle?: (enabled: boolean) => void;
   isGenerating?: boolean;
   onStopGeneration?: () => void;
-  onImageEdit?: (originalUrl: string, editedUrl: string, editPrompt: string) => void;
 }
 
 export function ChatInput({ 
@@ -47,15 +45,13 @@ export function ChatInput({
   webMode = false, 
   onWebModeToggle, 
   isGenerating = false, 
-  onStopGeneration,
-  onImageEdit
+  onStopGeneration
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [images, setImages] = useState<File[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
-  const [editingImageIndex, setEditingImageIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -121,10 +117,11 @@ export function ChatInput({
     setImageUrls(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleImageEdit = (editedImageUrl: string, editPrompt: string) => {
-    if (editingImageIndex !== null && onImageEdit) {
-      onImageEdit(imageUrls[editingImageIndex], editedImageUrl, editPrompt);
-    }
+  const handleImageEdit = (index: number) => {
+    // Instead of opening a dialog, just set a prompt in the input
+    const imageName = images[index]?.name || `image ${index + 1}`;
+    setInput(`Edit this image (${imageName}): `);
+    textareaRef.current?.focus();
   };
 
   const toggleTool = (toolId: string) => {
@@ -200,7 +197,7 @@ export function ChatInput({
               {images.map((image, index) => (
                 <div
                   key={index}
-                  className="relative group bg-surface border border-border rounded-lg p-2"
+                  className="relative group bg-surface border border-border rounded-xl p-3"
                 >
                   <div className="flex items-center gap-3">
                     {/* Thumbnail */}
@@ -208,23 +205,23 @@ export function ChatInput({
                       <img
                         src={imageUrls[index]}
                         alt={`Upload ${index + 1}`}
-                        className="w-12 h-12 object-cover rounded-lg"
+                        className="w-16 h-16 object-cover rounded-lg border border-border"
                       />
                       {/* Edit button overlay */}
                       <button
-                        onClick={() => setEditingImageIndex(index)}
-                        className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Edit image"
+                        onClick={() => handleImageEdit(index)}
+                        className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        title="Edit this image"
                       >
-                        <Edit className="w-4 h-4 text-white" />
+                        <Edit className="w-5 h-5 text-white" />
                       </button>
                     </div>
                     
                     {/* File info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 mb-1">
                         <ImageIcon className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                        <span className="text-sm truncate">{image.name}</span>
+                        <span className="text-sm font-medium truncate">{image.name}</span>
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {(image.size / 1024 / 1024).toFixed(1)} MB
@@ -234,7 +231,7 @@ export function ChatInput({
                     {/* Remove button */}
                     <button
                       onClick={() => removeImage(index)}
-                      className="p-1 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground"
+                      className="p-1.5 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -363,16 +360,6 @@ export function ChatInput({
           className="hidden"
         />
       </div>
-
-      {/* Image Edit Dialog */}
-      {editingImageIndex !== null && (
-        <ImageEditDialog
-          isOpen={editingImageIndex !== null}
-          onOpenChange={(open) => !open && setEditingImageIndex(null)}
-          imageUrl={imageUrls[editingImageIndex]}
-          onEditComplete={handleImageEdit}
-        />
-      )}
     </div>
   );
 }

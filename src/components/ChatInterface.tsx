@@ -82,24 +82,9 @@ export function ChatInterface() {
       };
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Generate real AI response
-      await generateRealAIResponse(assistantMessage.id, content, selectedModel, controller);
+      // Generate real AI response with images
+      await generateRealAIResponse(assistantMessage.id, content, selectedModel, controller, images);
     }
-  };
-
-  const handleImageEdit = async (originalUrl: string, editedUrl: string, editPrompt: string) => {
-    // Create a message showing the edited image
-    const editedMessage: Message = {
-      id: Date.now().toString(),
-      type: 'assistant',
-      content: `Here's your edited image: ${editPrompt}`,
-      timestamp: new Date(),
-      model: 'flux-kontext-dev',
-      images: [editedUrl],
-      tools: ['image-edit']
-    };
-    
-    setMessages(prev => [...prev, editedMessage]);
   };
 
   const handleStopGeneration = () => {
@@ -155,14 +140,14 @@ export function ChatInterface() {
     }
   };
 
-  const generateRealAIResponse = async (messageId: string, userInput: string, modelId: string, controller: AbortController) => {
+  const generateRealAIResponse = async (messageId: string, userInput: string, modelId: string, controller: AbortController, images?: File[]) => {
     try {
       const messages = [{
         role: 'user' as const,
         content: userInput
       }];
 
-      const stream = generateAIResponseStream(messages, modelId, webMode);
+      const stream = generateAIResponseStream(messages, modelId, webMode, false, images);
       let fullResponse = '';
 
       for await (const chunk of stream) {
@@ -307,7 +292,7 @@ export function ChatInterface() {
             <div className="text-center max-w-md">
               <h2 className="text-2xl font-bold mb-2">Welcome to Cognix</h2>
               <p className="text-muted-foreground mb-6">
-                Your intelligent AI assistant powered by multiple advanced models. Ask anything, upload images, or edit them with AI.
+                Your intelligent AI assistant powered by multiple advanced models. Ask anything, upload images, or generate them with AI.
               </p>
               <div className="flex flex-wrap gap-2 justify-center">
                 <button 
@@ -359,7 +344,6 @@ export function ChatInterface() {
             onWebModeToggle={setWebMode} 
             isGenerating={isGenerating} 
             onStopGeneration={handleStopGeneration}
-            onImageEdit={handleImageEdit}
           />
         </div>
       </div>

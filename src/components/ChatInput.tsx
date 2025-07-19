@@ -10,9 +10,11 @@ import {
   FileText,
   Globe,
   Square,
-  Edit
+  Edit,
+  Mic
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { VoiceModeDialog } from "./VoiceModeDialog";
 
 interface Tool {
   id: string;
@@ -54,6 +56,8 @@ export function ChatInput({
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
+  const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
+  const [isMicOn, setIsMicOn] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -132,6 +136,17 @@ export function ChatInput({
         ? prev.filter(id => id !== toolId)
         : [...prev, toolId]
     );
+  };
+
+  const handleMicToggle = () => {
+    setIsMicOn(!isMicOn);
+  };
+
+  const handleStopAI = () => {
+    if (onStopGeneration) {
+      onStopGeneration();
+    }
+    setIsVoiceModeOpen(false);
   };
 
   const adjustTextareaHeight = () => {
@@ -307,6 +322,21 @@ export function ChatInput({
 
         {/* Action buttons */}
         <div className="flex items-center gap-2">
+          {/* Voice Mode button */}
+          <button
+            onClick={() => setIsVoiceModeOpen(true)}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              isMicOn 
+                ? "text-green-500 bg-green-500/10 hover:bg-green-500/20" 
+                : "text-muted-foreground hover:bg-accent"
+            )}
+            title="Voice Mode"
+            disabled={disabled}
+          >
+            <Mic className="w-5 h-5" />
+          </button>
+
           {/* Web Mode toggle */}
           <button
             onClick={() => onWebModeToggle?.(!webMode)}
@@ -362,6 +392,15 @@ export function ChatInput({
           className="hidden"
         />
       </div>
+
+      {/* Voice Mode Dialog */}
+      <VoiceModeDialog
+        isOpen={isVoiceModeOpen}
+        onOpenChange={setIsVoiceModeOpen}
+        isMicOn={isMicOn}
+        onMicToggle={handleMicToggle}
+        onStopAI={handleStopAI}
+      />
     </div>
   );
 }

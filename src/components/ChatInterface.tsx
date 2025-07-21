@@ -324,10 +324,10 @@ export function ChatInterface() {
         {messages.length === 0 ? <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">
               <h2 className="text-2xl font-bold mb-2">Welcome to Cognix</h2>
-              <p className="text-muted-foreground mb-6">This is not the final product it may have some errors, and bugs so please report the errors and bugs on this Email-r8devsin@gmail.com.
+              <p className="text-muted-foreground mb-6">Your intelligent AI assistant powered by multiple advanced models. Ask anything, upload images, or generate them with AI.
 
 
-Thank You</p>
+At this time, we are facing some issues and bugs in the app so please report the error to this email- r8devsin@gmail.com and please attach the Screen shot of error if possible.</p>
               <div className="flex flex-wrap gap-2 justify-center">
                 <button onClick={() => handleSendMessage("What are the latest web development trends?")} className="px-4 py-2 bg-surface hover:bg-accent rounded-lg text-sm transition-colors">
                   Web Development Trends

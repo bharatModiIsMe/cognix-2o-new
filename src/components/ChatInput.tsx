@@ -1,20 +1,32 @@
 
 import { useState, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { IconButton } from "@/components/ui/icon-button";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { Mic, Send, Square, ImagePlus, X } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { useChatContext } from "@/context/ChatContext";
-import { VoiceModeDialog } from "@/components/VoiceModeDialog";
+import { 
+  Send, 
+  Image as ImageIcon, 
+  X, 
+  Settings,
+  Wand2,
+  PenTool,
+  FileText,
+  Globe,
+  Square,
+  Edit
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface Tool {
+  id: string;
+  name: string;
+  icon: React.ComponentType<any>;
+  color: string;
+}
+
+const tools: Tool[] = [
+  { id: "Generate Image", name: "Generate Image", icon: Wand2, color: "text-purple-500" },
+  { id: "write-story", name: "Write Story", icon: PenTool, color: "text-blue-500" },
+  { id: "summarize-text", name: "Summarize Text", icon: FileText, color: "text-green-500" },
+  { id: "build-webpage", name: "Build Web Page", icon: Globe, color: "text-orange-500" }
+];
 
 interface ChatInputProps {
   onSendMessage: (content: string, images?: File[], tools?: string[]) => void;
@@ -24,214 +36,331 @@ interface ChatInputProps {
   onWebModeToggle?: (enabled: boolean) => void;
   isGenerating?: boolean;
   onStopGeneration?: () => void;
-  onImageEdit?: (file: File) => void;
+  onImageEdit?: (imageFile: File) => void;
 }
 
 export function ChatInput({ 
   onSendMessage, 
   onNewChat, 
   disabled, 
-  webMode, 
-  onWebModeToggle,
-  isGenerating,
+  webMode = false, 
+  onWebModeToggle, 
+  isGenerating = false, 
   onStopGeneration,
   onImageEdit
 }: ChatInputProps) {
   const [input, setInput] = useState("");
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [images, setImages] = useState<File[]>([]);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
-  const [isVoiceModeOpen, setIsVoiceModeOpen] = useState(false);
+  const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { toast } = useToast();
-  const { isPro } = useChatContext();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Listen for custom event to set input value (from Ask Cognix)
   useEffect(() => {
-    const handleSetChatInput = (event: any) => {
+    const handleSetChatInput = (event: CustomEvent) => {
       setInput(event.detail.text);
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-      }
+      textareaRef.current?.focus();
     };
 
-    window.addEventListener('setChatInput', handleSetChatInput);
-
+    window.addEventListener('setChatInput', handleSetChatInput as EventListener);
+    
     return () => {
-      window.removeEventListener('setChatInput', handleSetChatInput);
+      window.removeEventListener('setChatInput', handleSetChatInput as EventListener);
     };
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      handleSendMessageClick();
-    }
-  };
-
-  const handleSendMessageClick = () => {
-    if (input.trim() !== "") {
-      onSendMessage(input, selectedFiles, selectedTools);
+  const handleSendMessage = async (messageContent?: string) => {
+    const content = messageContent || input;
+    if (!content.trim() && images.length === 0) return;
+    
+    try {
+      onSendMessage(content, images, selectedTools);
+      
+      // Clear the form
       setInput("");
-      setSelectedFiles([]);
+      setImages([]);
+      setImageUrls([]);
       setSelectedTools([]);
+      setIsToolMenuOpen(false);
+    } catch (error) {
+      console.error('Error sending message:', error);
     }
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length > 0) {
-      if (!isPro && files.length > 1) {
-        toast({
-          title: "Upgrade to Pro",
-          description: "Pro users can upload multiple images.",
-          variant: "destructive",
-        });
-        return;
-      }
-      setSelectedFiles(files);
-      setIsPopoverOpen(false);
+  const handleSubmit = () => {
+    handleSendMessage();
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
     }
   };
 
-  const handleRemoveFile = (index: number) => {
-    setSelectedFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    
+    // Create URLs for preview
+    const newUrls = imageFiles.map(file => URL.createObjectURL(file));
+    
+    setImages(prev => [...prev, ...imageFiles]);
+    setImageUrls(prev => [...prev, ...newUrls]);
   };
 
-  const handleToolSelect = (tool: string) => {
-    setSelectedTools(prevTools => {
-      if (prevTools.includes(tool)) {
-        return prevTools.filter(t => t !== tool);
-      } else {
-        return [...prevTools, tool];
-      }
-    });
+  const removeImage = (index: number) => {
+    // Revoke the URL to prevent memory leaks
+    URL.revokeObjectURL(imageUrls[index]);
+    
+    setImages(prev => prev.filter((_, i) => i !== index));
+    setImageUrls(prev => prev.filter((_, i) => i !== index));
   };
+
+  const handleImageEdit = (index: number) => {
+    const imageFile = images[index];
+    if (imageFile && onImageEdit) {
+      onImageEdit(imageFile);
+    }
+  };
+
+  const toggleTool = (toolId: string) => {
+    setSelectedTools(prev => 
+      prev.includes(toolId) 
+        ? prev.filter(id => id !== toolId)
+        : [...prev, toolId]
+    );
+  };
+
+  const adjustTextareaHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    }
+  };
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [input]);
+
+  // Cleanup URLs on unmount
+  useEffect(() => {
+    return () => {
+      imageUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Web Mode:</span>
-          <Switch id="web-mode" checked={webMode} onCheckedChange={onWebModeToggle} />
+    <div className="w-full max-w-4xl mx-auto">
+      {/* Web Mode indicator */}
+      {webMode && (
+        <div className="mb-2 flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-blue-500">
+            <Globe className="h-3 w-3" />
+            <span className="font-medium">🌐 Web Mode Enabled</span>
+          </div>
         </div>
+      )}
+      
+      {/* Selected tools and images display */}
+      {(selectedTools.length > 0 || images.length > 0) && (
+        <div className="mb-3 space-y-3">
+          {/* Tools */}
+          {selectedTools.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {selectedTools.map(toolId => {
+                const tool = tools.find(t => t.id === toolId);
+                if (!tool) return null;
+                
+                return (
+                  <div
+                    key={toolId}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border rounded-full text-sm"
+                  >
+                    <tool.icon className={cn("w-4 h-4", tool.color)} />
+                    <span>{tool.name}</span>
+                    <button
+                      onClick={() => toggleTool(toolId)}
+                      className="p-0.5 hover:bg-accent rounded-full"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-        <div>
-          {selectedFiles.length > 0 && (
-            <div className="flex items-center gap-2">
-              {selectedFiles.map((file, index) => (
-                <div key={index} className="flex items-center gap-1 text-xs">
-                  <span className="truncate">{file.name}</span>
-                  <IconButton onClick={() => handleRemoveFile(index)} size="sm" icon={<X className="h-3 w-3" />} />
+          {/* Images with thumbnails */}
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {images.map((image, index) => (
+                <div
+                  key={index}
+                  className="relative group bg-surface border border-border rounded-xl p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Thumbnail */}
+                    <div className="relative">
+                      <img
+                        src={imageUrls[index]}
+                        alt={`Upload ${index + 1}`}
+                        className="w-16 h-16 object-cover rounded-lg border border-border"
+                      />
+                      {/* Edit button overlay */}
+                      <button
+                        onClick={() => handleImageEdit(index)}
+                        className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        title="Edit this image"
+                      >
+                        <Edit className="w-5 h-5 text-white" />
+                      </button>
+                    </div>
+                    
+                    {/* File info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <ImageIcon className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                        <span className="text-sm font-medium truncate">{image.name}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {(image.size / 1024 / 1024).toFixed(1)} MB
+                      </div>
+                    </div>
+                    
+                    {/* Remove button */}
+                    <button
+                      onClick={() => removeImage(index)}
+                      className="p-1.5 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
-
-          {/* Image Editing Trigger */}
-          {selectedFiles.length === 1 && (
-            <Button variant="secondary" size="sm" onClick={() => onImageEdit?.(selectedFiles[0])}>
-              Edit Image
-            </Button>
-          )}
         </div>
-      </div>
-      
-      <div className="flex items-end gap-2">
-        <div className="flex-1 relative">
-          <Textarea
-            ref={textareaRef}
-            rows={1}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Write your message here..."
-            className="resize-none pr-10"
-            disabled={disabled}
-          />
-          <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-            <PopoverTrigger asChild>
-              <IconButton
-                size="icon"
-                variant="ghost"
-                className="absolute right-2 bottom-2 text-muted-foreground"
-                title="Add attachment"
-              >
-                <ImagePlus className="w-4 h-4" />
-              </IconButton>
-            </PopoverTrigger>
-            <PopoverContent className="w-64">
-              <div className="grid gap-4">
-                <p className="text-sm font-medium leading-none">Attachments</p>
-                <Separator />
-                <div className="grid gap-2">
-                  <label
-                    htmlFor="image-upload"
-                    className="px-4 py-2 bg-secondary hover:bg-secondary/80 rounded-md text-sm text-secondary-foreground cursor-pointer"
-                  >
-                    Select Image
-                  </label>
-                  <Input
-                    id="image-upload"
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileSelect}
-                  />
-                  {isPro && (
-                    <>
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-primary"
-                          checked={selectedTools.includes('Generate Image')}
-                          onChange={() => handleToolSelect('Generate Image')}
-                        />
-                        <span className="text-sm">Generate Image</span>
-                      </label>
-                    </>
-                  )}
+      )}
+
+      {/* Main input area */}
+      <div className={cn(
+        "relative flex items-end gap-3 p-4 bg-surface border border-border rounded-2xl",
+        "focus-within:border-primary/50 focus-within:shadow-surface transition-all duration-200"
+      )}>
+        {/* Tool menu */}
+        <div className="relative">
+          <button
+            onClick={() => setIsToolMenuOpen(!isToolMenuOpen)}
+            className={cn(
+              "p-2 hover:bg-accent rounded-lg transition-colors",
+              isToolMenuOpen && "bg-accent"
+            )}
+          >
+            <Settings className="w-5 h-5 text-muted-foreground" />
+          </button>
+
+          {isToolMenuOpen && (
+            <>
+              <div 
+                className="fixed inset-0 z-10" 
+                onClick={() => setIsToolMenuOpen(false)}
+              />
+              <div className="absolute bottom-full left-0 mb-2 bg-popover border border-border rounded-xl shadow-elevated z-20 p-2 min-w-48">
+                <div className="space-y-1">
+                  {tools.map((tool) => (
+                    <button
+                      key={tool.id}
+                      onClick={() => toggleTool(tool.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 p-2 rounded-lg transition-colors text-left",
+                        selectedTools.includes(tool.id) 
+                          ? "bg-primary/10 text-primary" 
+                          : "hover:bg-accent"
+                      )}
+                    >
+                      <tool.icon className={cn("w-4 h-4", tool.color)} />
+                      <span className="text-sm">{tool.name}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
-            </PopoverContent>
-          </Popover>
+            </>
+          )}
         </div>
-        
-        <div className="flex items-center gap-2">
-          {/* Voice Mode Button - separate from regular chat */}
-          <VoiceModeDialog 
-            isOpen={isVoiceModeOpen} 
-            onOpenChange={setIsVoiceModeOpen}
-          />
-          
-          <Button
-            size="icon"
-            variant="outline"
-            onClick={() => setIsVoiceModeOpen(true)}
-            className="shrink-0 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0"
-            title="Voice Assistant Mode"
-          >
-            <Mic className="w-4 h-4" />
-          </Button>
 
-          <Button
-            size="icon"
-            type="submit"
-            onClick={isGenerating ? onStopGeneration : handleSendMessageClick}
+        {/* Text input */}
+        <div className="flex-1 relative">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask anything... (Shift+Enter for new line)"
+            className="w-full resize-none bg-transparent border-0 outline-none placeholder:text-muted-foreground text-sm leading-6 max-h-32"
             disabled={disabled}
-            className="shrink-0"
+            rows={1}
+          />
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2">
+          {/* Web Mode toggle */}
+          <button
+            onClick={() => onWebModeToggle?.(!webMode)}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              webMode 
+                ? "text-blue-500 bg-blue-500/10 hover:bg-blue-500/20" 
+                : "text-muted-foreground hover:bg-accent"
+            )}
+            title={webMode ? "Disable Web Mode" : "Enable Web Mode"}
+            disabled={disabled}
+          >
+            <Globe className="w-5 h-5" />
+          </button>
+
+          {/* Image upload */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
+            disabled={disabled}
+          >
+            <ImageIcon className="w-5 h-5 text-muted-foreground" />
+          </button>
+
+          {/* Send/Stop button */}
+          <button
+            onClick={isGenerating ? onStopGeneration : handleSubmit}
+            disabled={!isGenerating && (disabled || (!input.trim() && images.length === 0))}
+            className={cn(
+              "p-2 rounded-lg transition-all duration-200",
+              isGenerating
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                : (!input.trim() && images.length === 0) || disabled
+                ? "text-muted-foreground cursor-not-allowed"
+                : "bg-gradient-ai text-white hover:shadow-glow"
+            )}
           >
             {isGenerating ? (
-              <Square className="w-4 h-4 animate-pulse" />
+              <Square className="w-5 h-5" />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="w-5 h-5" />
             )}
-          </Button>
+          </button>
         </div>
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleImageUpload}
+          className="hidden"
+        />
       </div>
     </div>
   );

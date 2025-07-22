@@ -292,36 +292,44 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
+    // Use the A4F images endpoint instead of chat completions
     const response = await fetch(`${a4fBaseUrl}/images/generations`, {
-      model: imageModel.apiModel,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      stream: false,
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${a4fApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: imageModel.apiModel,
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+        quality: "standard",
+        response_format: "url"
+      }),
     });
 
-    // For image generation, the response content should contain the image URL or data
-    const content = response.choices[0]?.message?.content;
-    if (content) {
-      // If the content contains a URL, return it
-      if (content.includes('http')) {
-        const urlMatch = content.match(/https?:\/\/[^\s]+/);
-        if (urlMatch) {
-          console.log('Found image URL:', urlMatch[0]);
-          return urlMatch[0];
-        }
-      }
-      // If it's base64 data, return it
-      if (content.startsWith('data:image')) {
-        console.log('Found base64 image');
-        return content;
-      }
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    console.log('Unexpected response structure:', JSON.stringify(response, null, 2));
+    const data = await response.json();
+    console.log('Image generation response:', data);
+
+    // Check for image URL in response
+    if (data.data && data.data[0] && data.data[0].url) {
+      console.log('Found image URL:', data.data[0].url);
+      return data.data[0].url;
+    }
+
+    // Check for b64_json format
+    if (data.data && data.data[0] && data.data[0].b64_json) {
+      console.log('Found base64 image');
+      return `data:image/png;base64,${data.data[0].b64_json}`;
+    }
+
+    // If no proper image data found, log the response structure
+    console.log('Unexpected response structure:', JSON.stringify(data, null, 2));
     throw new Error('No image data found in response');
     
   } catch (error) {

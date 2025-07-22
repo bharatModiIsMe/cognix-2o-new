@@ -1,7 +1,5 @@
-
 import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
-import { searchYouTubeVideos, shouldShowVideos } from './youtubeService';
 
 const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
 const a4fBaseUrl = 'https://api.a4f.co/v1';
@@ -11,15 +9,6 @@ const a4fClient = new OpenAI({
   baseURL: a4fBaseUrl,
   dangerouslyAllowBrowser: true
 });
-
-// Store user context for memory
-let userContext: { name?: string; preferences?: Record<string, any> } = {};
-
-export const updateUserContext = (context: Partial<typeof userContext>) => {
-  userContext = { ...userContext, ...context };
-};
-
-export const getUserContext = () => userContext;
 
 export interface AIModel {
   id: string;
@@ -31,45 +20,38 @@ export interface AIModel {
 
 export const AI_MODELS: AIModel[] = [
   {
-    id: "gemini-2.5-pro",
-    name: "Gemini 2.5 Pro",
+    id: "gemini-2.5-flash-thinking",
+    name: "Gemini 2.5 Flash Thinking",
     apiModel: "provider-6/gemini-2.5-flash-thinking",
-    description: "Google's most advanced model with thinking capabilities",
-    badge: "Pro"
+    description: "Google's most capable model with thinking",
+    badge: "Multimodal"
   },
   {
-    id: "cognix-2o-web",
-    name: "Cognix-2o Web",
-    apiModel: "provider-6/gpt-4o-mini-search-preview",
-    description: "Web-enabled AI with real-time search capabilities",
-    badge: "Web"
-  },
-  {
-    id: "deepseek-v3",
+    id: "deepseek-v3-0324",
     name: "DeepSeek V3",
-    apiModel: "provider-6/deepseek-r1-uncensored",
-    description: "Advanced reasoning and coding capabilities",
-    badge: "Reasoning"
-  },
-  {
-    id: "gpt-4o",
-    name: "GPT-4o",
-    apiModel: "provider-6/gpt-4o",
-    description: "OpenAI's powerful multimodal model",
-    badge: "Vision"
-  },
-  {
-    id: "cognix-2o-reasoning",
-    name: "Cognix-2o Reasoning",
-    apiModel: "provider-1/sonar-reasoning",
+    apiModel: "provider-3/deepseek-v3-0324",
     description: "Advanced reasoning capabilities",
     badge: "Reasoning"
   },
   {
-    id: "gpt-4.1-mini",
-    name: "GPT-4.1 Mini",
-    apiModel: "provider-6/gpt-4.1-mini",
-    description: "Fast and efficient AI model",
+    id: "grok-4-0709",
+    name: "Grok-4",
+    apiModel: "provider-3/grok-4-0709",
+    description: "Real-time information access",
+    badge: "Real-time"
+  },
+  {
+    id: "qwen-2.5-vl-72b",
+    name: "Qwen AI",
+    apiModel: "provider-5/Qwen/Qwen2.5-VL-72B-Instruct",
+    description: "Multilingual AI assistant",
+    badge: "Multilingual"
+  },
+  {
+    id: "gpt-4.1-nano",
+    name: "GPT-4.1 Nano",
+    apiModel: "provider-3/gpt-4.1-nano",
+    description: "OpenAI's compact model",
     badge: "Fast"
   }
 ];
@@ -107,60 +89,36 @@ export const IMAGE_MODELS: AIModel[] = [
     id: "flux-1-schnell-v2",
     name: "Flux.1-schnell-v2",
     apiModel: "provider-2/FLUX.1-schnell-v2",
-    description: "Latest quick image generation",
-    badge: "Quick"
+    description: "Enhanced quick generation",
+    badge: "Enhanced"
   },
   {
     id: "imagen-4",
     name: "Imagen-4",
     apiModel: "provider-4/imagen-4",
     description: "Google's latest image model",
-    badge: "Google"
+    badge: "Latest"
   },
   {
     id: "imagen-3",
     name: "Imagen-3",
     apiModel: "provider-4/imagen-3",
-    description: "Google's image generation",
-    badge: "Google"
+    description: "Google's image model",
+    badge: "Reliable"
   },
   {
     id: "flux-1-dev",
     name: "Flux.1-dev",
     apiModel: "provider-3/FLUX.1-dev",
-    description: "Development version of Flux",
+    description: "Development image model",
     badge: "Dev"
   },
   {
     id: "flux-kontext-pro",
-    name: "FLUX Kontext Pro",
+    name: "Flux-Kontext-Pro",
     apiModel: "provider-1/FLUX.1-kontext-pro",
-    description: "Context-aware image generation",
+    description: "Context-aware generation",
     badge: "Pro"
-  },
-  {
-    id: "imagen-3.0-generate-002",
-    name: "Imagen 3.0 Gen 002",
-    apiModel: "provider-3/imagen-3.0-generate-002",
-    description: "Imagen 3.0 generation model",
-    badge: "Gen"
-  },
-  {
-    id: "imagen-4.0-generate-preview",
-    name: "Imagen 4.0 Preview",
-    apiModel: "provider-3/imagen-4.0-generate-preview-06-06",
-    description: "Imagen 4.0 preview model",
-    badge: "Preview"
-  }
-];
-
-export const IMAGE_EDIT_MODELS: AIModel[] = [
-  {
-    id: "flux-kontext-dev",
-    name: "FLUX Kontext Dev",
-    apiModel: "provider-3/flux-kontext-dev",
-    description: "Advanced image editing with context understanding",
-    badge: "Edit"
   }
 ];
 
@@ -200,82 +158,16 @@ function needsWebSearch(query: string): boolean {
   return webSearchTriggers.some(trigger => trigger.test(query));
 }
 
-// Helper function to extract better search keywords for YouTube videos
-function extractVideoSearchKeywords(query: string): string {
-  // Remove common conversational words and extract key terms
-  const stopWords = ['how', 'can', 'you', 'please', 'show', 'me', 'tell', 'explain', 'what', 'is', 'are', 'the', 'a', 'an', 'and', 'or', 'but'];
-  const words = query.toLowerCase().split(/\s+/);
-  
-  // Keep important terms that indicate what to search for
-  const keywords = words.filter(word => 
-    word.length > 2 && 
-    !stopWords.includes(word) &&
-    !['tutorial', 'video', 'guide'].includes(word) // These will be added back
-  );
-  
-  // Add contextual terms for better results
-  const contextTerms = [];
-  if (query.toLowerCase().includes('how to') || query.toLowerCase().includes('tutorial')) {
-    contextTerms.push('tutorial', 'how to');
-  }
-  if (query.toLowerCase().includes('learn')) {
-    contextTerms.push('beginner guide');
-  }
-  
-  return [...keywords.slice(0, 3), ...contextTerms].join(' ');
-}
-
-// Helper function to convert File to base64
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
-  });
-}
-
 export async function generateAIResponse(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
-  modelId: string,
-  images?: File[]
+  modelId: string
 ): Promise<string> {
   const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
 
   try {
-    // Convert images to base64 if provided
-    const imageUrls: string[] = [];
-    if (images && images.length > 0) {
-      for (const image of images) {
-        const base64 = await fileToBase64(image);
-        imageUrls.push(base64);
-      }
-    }
-
-    // Prepare messages with images for all models
-    const enhancedMessages = messages.map((msg, index) => {
-      if (msg.role === 'user' && index === messages.length - 1 && imageUrls.length > 0) {
-        // Add images to the last user message for all models
-        return {
-          role: 'user' as const,
-          content: [
-            { type: "text" as const, text: msg.content },
-            ...imageUrls.map(url => ({
-              type: "image_url" as const,
-              image_url: { url }
-            }))
-          ]
-        };
-      }
-      return {
-        role: msg.role,
-        content: msg.content
-      };
-    });
-
     const response = await a4fClient.chat.completions.create({
       model: model.apiModel,
-      messages: enhancedMessages,
+      messages,
       stream: false,
     });
 
@@ -292,36 +184,44 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    const response = await a4fClient.chat.completions.create({
-      model: imageModel.apiModel,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      stream: false,
+    // Use the A4F images endpoint instead of chat completions
+    const response = await fetch(`${a4fBaseUrl}/images/generations`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${a4fApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: imageModel.apiModel,
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+        quality: "standard",
+        response_format: "url"
+      }),
     });
 
-    // For image generation, the response content should contain the image URL or data
-    const content = response.choices[0]?.message?.content;
-    if (content) {
-      // If the content contains a URL, return it
-      if (content.includes('http')) {
-        const urlMatch = content.match(/https?:\/\/[^\s]+/);
-        if (urlMatch) {
-          console.log('Found image URL:', urlMatch[0]);
-          return urlMatch[0];
-        }
-      }
-      // If it's base64 data, return it
-      if (content.startsWith('data:image')) {
-        console.log('Found base64 image');
-        return content;
-      }
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    console.log('Unexpected response structure:', JSON.stringify(response, null, 2));
+    const data = await response.json();
+    console.log('Image generation response:', data);
+
+    // Check for image URL in response
+    if (data.data && data.data[0] && data.data[0].url) {
+      console.log('Found image URL:', data.data[0].url);
+      return data.data[0].url;
+    }
+
+    // Check for b64_json format
+    if (data.data && data.data[0] && data.data[0].b64_json) {
+      console.log('Found base64 image');
+      return `data:image/png;base64,${data.data[0].b64_json}`;
+    }
+
+    // If no proper image data found, log the response structure
+    console.log('Unexpected response structure:', JSON.stringify(data, null, 2));
     throw new Error('No image data found in response');
     
   } catch (error) {
@@ -330,112 +230,12 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   }
 }
 
-export async function editImage(imageFile: File, prompt: string): Promise<string> {
-  try {
-    console.log('Editing image with flux-kontext-dev model, prompt:', prompt);
-    
-    // Get original image dimensions for aspect ratio preservation
-    const originalDimensions = await getImageDimensions(imageFile);
-    
-    // Convert image to base64
-    const base64Image = await fileToBase64(imageFile);
-    
-    // Create form data for image editing with enhanced parameters
-    const formData = new FormData();
-    formData.append('image', imageFile);
-    formData.append('prompt', prompt);
-    formData.append('model', 'provider-3/flux-kontext-dev');
-    formData.append('width', originalDimensions.width.toString());
-    formData.append('height', originalDimensions.height.toString());
-    formData.append('strength', '0.8'); // Higher strength for better quality
-    formData.append('guidance_scale', '7.5'); // Better guidance for quality
-    
-    // Use direct API call for image editing
-    const response = await fetch(`${a4fBaseUrl}/images/edits`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${a4fApiKey}`,
-      },
-      body: formData
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    
-    // Check for image URL in the response
-    if (result.data && result.data[0] && result.data[0].url) {
-      console.log('Found edited image URL:', result.data[0].url);
-      return result.data[0].url;
-    }
-    
-    // If no URL found, try using the flux-kontext-dev model with chat API
-    const chatResponse = await a4fClient.chat.completions.create({
-      model: "provider-3/flux-kontext-dev",
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { 
-              type: "text" as const, 
-              text: `${prompt}. Please maintain the original aspect ratio and dimensions (${originalDimensions.width}x${originalDimensions.height}). Ensure high quality output.` 
-            },
-            {
-              type: "image_url" as const,
-              image_url: { url: base64Image }
-            }
-          ]
-        }
-      ],
-      stream: false,
-    });
-
-    const content = chatResponse.choices[0]?.message?.content;
-    if (content) {
-      // Check for image URL in response
-      const urlMatch = content.match(/https?:\/\/[^\s)]+/);
-      if (urlMatch) {
-        console.log('Found edited image URL from chat API:', urlMatch[0]);
-        return urlMatch[0];
-      }
-      
-      // Check for base64 image
-      if (content.startsWith('data:image')) {
-        console.log('Found edited base64 image');
-        return content;
-      }
-    }
-
-    console.log('No image data found in response, returning original image');
-    return URL.createObjectURL(imageFile);
-    
-  } catch (error) {
-    console.error('Image editing error:', error);
-    throw new Error(`Failed to edit image: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-// Helper function to get image dimensions
-function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-
 export async function* generateAIResponseStream(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   modelId: string,
   webMode: boolean = false,
-  isImageGeneration: boolean = false,
-  images?: File[]
-): AsyncGenerator<{ content: string; videos?: any[] }, void, unknown> {
+  isImageGeneration: boolean = false
+): AsyncGenerator<string, void, unknown> {
   const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
 
   try {
@@ -443,28 +243,15 @@ export async function* generateAIResponseStream(
     let searchResults: SearchResult[] = [];
     let enhancedMessages = [...messages];
     let isWebSearchTriggered = false;
-    let youtubeVideos: any[] = [];
     
     const lastUserMessage = messages[messages.length - 1];
     if (lastUserMessage?.role === 'user') {
-      // Check if query should show YouTube videos and get relevant videos
-      if (shouldShowVideos(lastUserMessage.content)) {
-        try {
-          // Extract more specific keywords for better video search
-          const searchQuery = extractVideoSearchKeywords(lastUserMessage.content);
-          youtubeVideos = await searchYouTubeVideos(searchQuery, 3);
-          console.log('Found YouTube videos:', youtubeVideos.length);
-        } catch (error) {
-          console.error('YouTube search failed:', error);
-        }
-      }
-
       // Automatic detection or manual web mode
       const shouldSearch = webMode || needsWebSearch(lastUserMessage.content);
       
       if (shouldSearch) {
         try {
-          yield { content: "🔍 Searching the web for real-time information...\n\n", videos: youtubeVideos };
+          yield "🔍 Searching the web for real-time information...\n\n";
           searchResults = await googleSearch(lastUserMessage.content);
           if (searchResults.length > 0) {
             isWebSearchTriggered = true;
@@ -474,65 +261,25 @@ export async function* generateAIResponseStream(
               content: `${lastUserMessage.content}\n\n**Web Search Results:**\n${searchContext}\n\nPlease answer the user's question using the above search results. Present the information as if you knew it directly, highlighting key details with proper formatting. Use markdown to emphasize important data like prices, dates, and sources. If specific data isn't found, mention "No exact data found" and provide the most relevant available information. Never say you don't have real-time access - you do have access through these search results.`
             };
           } else {
-            yield { content: "No relevant search results found. Providing general information...\n\n", videos: youtubeVideos };
+            yield "No relevant search results found. Providing general information...\n\n";
           }
         } catch (error) {
           console.error('Web search failed:', error);
-          yield { content: "Web search temporarily unavailable. Providing general information...\n\n", videos: youtubeVideos };
+          yield "Web search temporarily unavailable. Providing general information...\n\n";
         }
       }
     }
 
-    // Convert images to base64 if provided
-    const imageUrls: string[] = [];
-    if (images && images.length > 0) {
-      for (const image of images) {
-        const base64 = await fileToBase64(image);
-        imageUrls.push(base64);
-      }
-    }
-
-    // Add images to the last user message if provided - works for all models
-    if (imageUrls.length > 0 && enhancedMessages.length > 0) {
-      const lastMessageIndex = enhancedMessages.length - 1;
-      const lastMessage = enhancedMessages[lastMessageIndex];
-      if (lastMessage.role === 'user') {
-        enhancedMessages[lastMessageIndex] = {
-          role: 'user',
-          content: [
-            { type: "text" as const, text: lastMessage.content },
-            ...imageUrls.map(url => ({
-              type: "image_url" as const,
-              image_url: { url }
-            }))
-          ] as any
-        };
-      }
-    }
-
-    // Extract user name from conversation for memory
-    const userName = userContext.name;
-    const nameFromMessages = enhancedMessages.find(msg => 
-      msg.role === 'user' && 
-      /my name is ([a-zA-Z]+)/i.test(msg.content)
-    )?.content.match(/my name is ([a-zA-Z]+)/i)?.[1];
-    
-    if (nameFromMessages && !userName) {
-      updateUserContext({ name: nameFromMessages });
-    }
-
-    // Enhanced system prompt with user context
-    const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities, image understanding, and YouTube video recommendations.
+    // Enhanced system prompt with function calling support
+    const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities.
 
 IMPORTANT: You have access to real-time information through web search results when provided. NEVER say "I don't have real-time access" or "I can't provide current information" - you can and do have access through search results.
 
-You can also see and analyze images that users upload. When users share images, describe what you see and help them with any questions about the images.
-
-${userName ? `USER CONTEXT: The user's name is ${userName}. Remember this information throughout the conversation.` : ''}
-
 ${isWebSearchTriggered ? '🌐 **Web search was performed** - Use the provided search results to give accurate, current information. Present it naturally as if you knew it directly.' : ''}
 
-${youtubeVideos.length > 0 ? `📹 **YouTube videos found** - Relevant educational videos have been provided above your response. Reference these videos when appropriate in your answer.` : ''}
+For models that support function calling (GPT-4.1, Grok-4, Gemini-2.5-Flash):
+Available functions:
+- googleSearch(query: string): Search the web for real-time information
 
 Format your responses using markdown:
 - Use **bold** for important terms and emphasis
@@ -544,6 +291,9 @@ Format your responses using markdown:
 
 Always provide well-structured, formatted responses that are easy to read and understand.`;
 
+    // For models that support function calling, add function definitions
+    const supportsFunction = ['gemini-2.5-flash', 'gpt-4.1-nano', 'grok-4-0709'].includes(modelId);
+    
     const requestBody: any = {
       model: model.apiModel,
       messages: [
@@ -553,6 +303,27 @@ Always provide well-structured, formatted responses that are easy to read and un
       stream: true,
     };
 
+    // Add function calling for supported models
+    if (supportsFunction && !isWebSearchTriggered) {
+      requestBody.functions = [
+        {
+          name: 'googleSearch',
+          description: 'Search the web for real-time information, current events, prices, news, or any time-sensitive data',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'The search query to find real-time information'
+              }
+            },
+            required: ['query']
+          }
+        }
+      ];
+      requestBody.function_call = 'auto';
+    }
+
     const response = await a4fClient.chat.completions.create(requestBody) as any;
 
     if (response[Symbol.asyncIterator]) {
@@ -560,18 +331,18 @@ Always provide well-structured, formatted responses that are easy to read and un
       for await (const chunk of response) {
         const content = chunk.choices[0]?.delta?.content;
         if (content) {
-          yield { content, videos: youtubeVideos };
+          yield content;
         }
       }
     } else {
       // Non-streaming response
       const content = response.choices[0]?.message?.content;
       if (content) {
-        yield { content, videos: youtubeVideos };
+        yield content;
       }
     }
   } catch (error) {
     console.error('AI API Stream Error:', error);
-    yield { content: "I'm experiencing some technical difficulties right now. Please try again in a moment.", videos: [] };
+    yield "I'm experiencing some technical difficulties right now. Please try again in a moment.";
   }
 }

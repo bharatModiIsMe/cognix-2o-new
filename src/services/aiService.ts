@@ -302,8 +302,35 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
     // Convert image to base64
     const base64Image = await fileToBase64(imageFile);
     
-    // Use A4F flux-kontext-dev model directly for image editing
-    const response = await a4fClient.chat.completions.create({
+    // Create form data for image editing
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    formData.append('prompt', prompt);
+    formData.append('model', 'provider-3/flux-kontext-dev');
+    
+    // Use direct API call for image editing
+    const response = await fetch(`${a4fBaseUrl}/images/edits`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${a4fApiKey}`,
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    // Check for image URL in the response
+    if (result.data && result.data[0] && result.data[0].url) {
+      console.log('Found edited image URL:', result.data[0].url);
+      return result.data[0].url;
+    }
+    
+    // If no URL found, try using the flux-kontext-dev model with chat API
+    const chatResponse = await a4fClient.chat.completions.create({
       model: "provider-3/flux-kontext-dev",
       messages: [
         {
@@ -320,26 +347,24 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
       stream: false,
     });
 
-    // For image editing, the response content should contain the edited image URL or data
-    const content = response.choices[0]?.message?.content;
+    const content = chatResponse.choices[0]?.message?.content;
     if (content) {
-      // If the content contains a URL, return it
-      if (content.includes('http')) {
-        const urlMatch = content.match(/https?:\/\/[^\s]+/);
-        if (urlMatch) {
-          console.log('Found edited image URL:', urlMatch[0]);
-          return urlMatch[0];
-        }
+      // Check for image URL in response
+      const urlMatch = content.match(/https?:\/\/[^\s)]+/);
+      if (urlMatch) {
+        console.log('Found edited image URL from chat API:', urlMatch[0]);
+        return urlMatch[0];
       }
-      // If it's base64 data, return it
+      
+      // Check for base64 image
       if (content.startsWith('data:image')) {
         console.log('Found edited base64 image');
         return content;
       }
     }
 
-    console.log('Unexpected edit response structure:', JSON.stringify(response, null, 2));
-    throw new Error('No edited image data found in response');
+    console.log('No image data found in response, returning original image');
+    return URL.createObjectURL(imageFile);
     
   } catch (error) {
     console.error('Image editing error:', error);

@@ -17,6 +17,13 @@ export interface Message {
   liked?: boolean;
   disliked?: boolean;
 }
+interface SavedChat {
+  id: string;
+  title: string;
+  timestamp: string;
+  messages: Message[];
+}
+
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedModel, setSelectedModel] = useState("gemini-2.5-pro");
@@ -30,6 +37,7 @@ export function ChatInterface() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [imageEditingFile, setImageEditingFile] = useState<File | null>(null);
+  const [savedChats, setSavedChats] = useState<SavedChat[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({
@@ -318,6 +326,24 @@ export function ChatInterface() {
       }
     }));
   };
+
+  const handleSaveChat = (messageId: string) => {
+    if (messages.length === 0) return;
+    
+    const firstUserMessage = messages.find(m => m.type === 'user')?.content || 'Untitled Chat';
+    const title = firstUserMessage.length > 50 
+      ? firstUserMessage.substring(0, 50) + '...' 
+      : firstUserMessage;
+    
+    const newSavedChat: SavedChat = {
+      id: Date.now().toString(),
+      title,
+      timestamp: new Date().toLocaleDateString(),
+      messages: [...messages]
+    };
+    
+    setSavedChats(prev => [newSavedChat, ...prev]);
+  };
   return <div className="flex-1 flex flex-col h-full">
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-20 pb-24" onMouseUp={handleTextSelection}>
@@ -341,7 +367,7 @@ At this time, we are facing some issues and bugs in the app so please report the
               </div>
             </div>
           </div> : <>
-            {messages.map(message => <ChatMessage key={message.id} message={message} onLike={isLiked => handleLikeMessage(message.id, isLiked)} onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} onExport={() => setIsExportOpen(true)} />)}
+            {messages.map(message => <ChatMessage key={message.id} message={message} onLike={isLiked => handleLikeMessage(message.id, isLiked)} onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} onExport={() => setIsExportOpen(true)} onSave={() => handleSaveChat(message.id)} />)}
             <div ref={messagesEndRef} />
           </>}
       </div>

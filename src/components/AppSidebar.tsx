@@ -14,13 +14,22 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+interface SavedChat {
+  id: string;
+  title: string;
+  timestamp: string;
+  messages: any[];
+}
+
 interface AppSidebarProps {
   onNewChat: () => void;
   onClearHistory: () => void;
   onClose?: () => void;
+  onSaveChat?: (chat: SavedChat) => void;
+  savedChats?: SavedChat[];
 }
 
-export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarProps) {
+export function AppSidebar({ onNewChat, onClearHistory, onClose, savedChats = [] }: AppSidebarProps) {
   const isMobile = useIsMobile();
   const [isOpen, setIsOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -31,10 +40,12 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarPro
     { id: 4, title: "UI/UX Design Trends", timestamp: "1 week ago" },
   ]);
 
+  const [showSaved, setShowSaved] = useState(false);
+
   const menuItems = [
     { icon: Plus, label: "New Chat", action: () => { onNewChat(); onClose?.(); }, primary: true },
     { icon: History, label: "History", action: () => console.log("History clicked") },
-    { icon: Bookmark, label: "Saved", action: () => console.log("Saved clicked") },
+    { icon: Bookmark, label: "Saved", action: () => setShowSaved(!showSaved) },
     { icon: User, label: "Profile", action: () => console.log("Profile clicked") },
     { icon: HelpCircle, label: "Help", action: () => console.log("Help clicked") },
     { icon: Trash2, label: "Clear History", action: () => { onClearHistory(); onClose?.(); }, destructive: true },
@@ -136,7 +147,7 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarPro
         ))}
 
         {/* Recent chats - only show when expanded */}
-        {(isOpen || isMobile) && (
+        {(isOpen || isMobile) && !showSaved && (
           <div className="mt-8">
             <h3 className="text-sm font-medium text-sidebar-foreground/70 mb-3 px-3">
               Recent Chats
@@ -161,6 +172,42 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose }: AppSidebarPro
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Saved chats - only show when expanded and saved is selected */}
+        {(isOpen || isMobile) && showSaved && (
+          <div className="mt-8">
+            <h3 className="text-sm font-medium text-sidebar-foreground/70 mb-3 px-3">
+              Saved Chats
+            </h3>
+            <div className="space-y-1">
+              {savedChats.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-sidebar-foreground/50">
+                  No saved chats yet
+                </div>
+              ) : (
+                savedChats.map((chat) => (
+                  <div
+                    key={chat.id}
+                    className="group flex items-center gap-3 p-3 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer"
+                  >
+                    <Bookmark className="w-4 h-4 text-sidebar-foreground/50 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-sidebar-foreground truncate">
+                        {chat.title}
+                      </p>
+                      <p className="text-xs text-sidebar-foreground/50">
+                        {chat.timestamp}
+                      </p>
+                    </div>
+                    <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-sidebar-border rounded transition-all shrink-0">
+                      <Trash2 className="w-3 h-3 text-sidebar-foreground/50" />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}

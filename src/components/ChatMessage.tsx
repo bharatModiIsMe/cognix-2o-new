@@ -38,6 +38,7 @@ interface ChatMessageProps {
   onDislike: (isDisliked: boolean) => void;
   onRegenerate: (modelId?: string) => void;
   onExport: () => void;
+  onSave?: () => void;
 }
 
 export function ChatMessage({ 
@@ -45,7 +46,8 @@ export function ChatMessage({
   onLike, 
   onDislike, 
   onRegenerate, 
-  onExport 
+  onExport,
+  onSave 
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -229,9 +231,9 @@ export function ChatMessage({
             </button>
 
             <button
-              onClick={handleSave}
+              onClick={onSave || handleSave}
               className="p-2 hover:bg-accent rounded-lg transition-colors"
-              title="Save message"
+              title="Save chat"
             >
               <Save className="w-4 h-4" />
             </button>

@@ -45,26 +45,28 @@ export async function textToSpeech(text: string): Promise<ArrayBuffer> {
   try {
     console.log('Converting text to speech...');
     
-    // Use proper TTS API endpoint
-    const formData = new FormData();
-    formData.append('model', 'provider-3/tts-1');
-    formData.append('input', text);
-    formData.append('voice', 'alloy');
-    
-    const response = await fetch(`${a4fBaseUrl}/audio/speech`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${a4fApiKey}`,
-      },
-      body: formData
+    const completion = await a4fClient.chat.completions.create({
+      model: "provider-3/tts-1",
+      messages: [
+        { role: "user", content: text },
+      ],
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const audioUrl = completion.choices[0]?.message?.content;
+    if (audioUrl && audioUrl.startsWith('http')) {
+      const response = await fetch(audioUrl);
+      if (response.ok) {
+        return await response.arrayBuffer();
+      }
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    return arrayBuffer;
+    // Fallback to browser's built-in speech synthesis
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.speak(utterance);
+    }
+    
+    return new ArrayBuffer(0);
   } catch (error) {
     console.error('Text to speech error:', error);
     

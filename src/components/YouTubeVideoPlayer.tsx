@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from './ui/button';
-import { Dialog, DialogContent } from './ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
+import { ScrollArea } from './ui/scroll-area';
 import { YouTubeVideo } from '../services/youtubeService';
 
 interface YouTubeVideoPlayerProps {
@@ -44,6 +45,7 @@ export const YouTubeVideoPlayer = ({ video, onClose }: YouTubeVideoPlayerProps) 
   return (
     <Dialog open={!!video} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl h-[80vh] p-0">
+        <DialogTitle className="sr-only">{video.title}</DialogTitle>
         <div className="flex h-full">
           {/* Video Player - Left Side */}
           <div className="flex-1 bg-black relative">
@@ -67,40 +69,42 @@ export const YouTubeVideoPlayer = ({ video, onClose }: YouTubeVideoPlayerProps) 
           </div>
           
           {/* Analysis - Right Side */}
-          <div className="w-80 bg-background border-l p-4 overflow-y-auto">
-            <h3 className="font-semibold mb-4 text-lg">Video Analysis</h3>
-            {analysis ? (
-              <div className="prose prose-sm max-w-none">
-                {analysis.split('\n').map((line, index) => {
-                  if (line.startsWith('**') && line.endsWith('**')) {
-                    return (
-                      <h4 key={index} className="font-semibold mt-3 mb-1">
-                        {line.replace(/\*\*/g, '')}
-                      </h4>
-                    );
-                  }
-                  if (line.startsWith('- ')) {
-                    return (
-                      <li key={index} className="ml-4 mb-1">
-                        {line.substring(2)}
-                      </li>
-                    );
-                  }
-                  if (line.trim()) {
-                    return (
-                      <p key={index} className="mb-2 text-sm">
-                        {line}
-                      </p>
-                    );
-                  }
-                  return <br key={index} />;
-                })}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">
-                Loading video analysis...
-              </p>
-            )}
+          <div className="w-80 bg-background border-l p-4">
+            <ScrollArea className="h-full">
+              <h3 className="font-semibold mb-4 text-lg">Video Analysis</h3>
+              {analysis ? (
+                <div className="prose prose-sm max-w-none">
+                  {analysis.split('\n').map((line, index) => {
+                    if (line.startsWith('**') && line.endsWith('**')) {
+                      return (
+                        <h4 key={index} className="font-semibold mt-3 mb-1">
+                          {line.replace(/\*\*/g, '')}
+                        </h4>
+                      );
+                    }
+                    if (line.startsWith('- ')) {
+                      return (
+                        <li key={index} className="ml-4 mb-1">
+                          {line.substring(2)}
+                        </li>
+                      );
+                    }
+                    if (line.trim()) {
+                      return (
+                        <p key={index} className="mb-2 text-sm">
+                          {line}
+                        </p>
+                      );
+                    }
+                    return <br key={index} />;
+                  })}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  Loading video analysis...
+                </p>
+              )}
+            </ScrollArea>
           </div>
         </div>
       </DialogContent>

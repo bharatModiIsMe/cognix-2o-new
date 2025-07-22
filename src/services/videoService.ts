@@ -11,13 +11,15 @@ export async function generateVideo(prompt: string): Promise<string> {
     console.log('Generating video with prompt:', prompt);
     
     const completion = await client.chat.completions.create({
-      model: "provider-6/wan-2.1",
+      model: "wan-2.1",
       messages: [
         {
           role: "user",
-          content: prompt,
+          content: `Generate a video: ${prompt}`,
         },
       ],
+      max_tokens: 1000,
+      temperature: 0.7,
     });
 
     const content = completion.choices[0]?.message?.content;

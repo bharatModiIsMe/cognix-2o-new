@@ -11,7 +11,7 @@ export interface YouTubeVideo {
   duration?: string;
 }
 
-export const searchYouTubeVideos = async (query: string, maxResults: number = 5): Promise<YouTubeVideo[]> => {
+export const searchYouTubeVideos = async (query: string, maxResults: number = 3): Promise<YouTubeVideo[]> => {
   try {
     const searchResponse = await fetch(
       `${YOUTUBE_API_BASE_URL}/search?key=${YOUTUBE_API_KEY}&q=${encodeURIComponent(query)}&part=snippet&type=video&maxResults=${maxResults}&order=relevance`

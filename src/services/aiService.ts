@@ -47,7 +47,7 @@ export const AI_MODELS: AIModel[] = [
   {
     id: "deepseek-v3",
     name: "DeepSeek V3",
-    apiModel: "provider-3/deepseek-v3-0324",
+    apiModel: "provider-6/deepseek-r1-uncensored",
     description: "Advanced reasoning and coding capabilities",
     badge: "Reasoning"
   },

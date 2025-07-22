@@ -158,6 +158,11 @@ export function ChatMessage({
                   src={image}
                   alt={`Generated image ${index + 1}`}
                   className="w-full h-auto max-h-96 rounded-lg border shadow-sm hover:shadow-md transition-shadow object-contain"
+                  style={{ maxWidth: '100%', height: 'auto' }}
+                  onError={(e) => {
+                    console.error('Image failed to load:', image);
+                    e.currentTarget.style.display = 'none';
+                  }}
                 />
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
                   <ImageDownloadButton 

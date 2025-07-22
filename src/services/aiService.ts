@@ -200,6 +200,31 @@ function needsWebSearch(query: string): boolean {
   return webSearchTriggers.some(trigger => trigger.test(query));
 }
 
+// Helper function to extract better search keywords for YouTube videos
+function extractVideoSearchKeywords(query: string): string {
+  // Remove common conversational words and extract key terms
+  const stopWords = ['how', 'can', 'you', 'please', 'show', 'me', 'tell', 'explain', 'what', 'is', 'are', 'the', 'a', 'an', 'and', 'or', 'but'];
+  const words = query.toLowerCase().split(/\s+/);
+  
+  // Keep important terms that indicate what to search for
+  const keywords = words.filter(word => 
+    word.length > 2 && 
+    !stopWords.includes(word) &&
+    !['tutorial', 'video', 'guide'].includes(word) // These will be added back
+  );
+  
+  // Add contextual terms for better results
+  const contextTerms = [];
+  if (query.toLowerCase().includes('how to') || query.toLowerCase().includes('tutorial')) {
+    contextTerms.push('tutorial', 'how to');
+  }
+  if (query.toLowerCase().includes('learn')) {
+    contextTerms.push('beginner guide');
+  }
+  
+  return [...keywords.slice(0, 3), ...contextTerms].join(' ');
+}
+
 // Helper function to convert File to base64
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -309,14 +334,21 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
   try {
     console.log('Editing image with flux-kontext-dev model, prompt:', prompt);
     
+    // Get original image dimensions for aspect ratio preservation
+    const originalDimensions = await getImageDimensions(imageFile);
+    
     // Convert image to base64
     const base64Image = await fileToBase64(imageFile);
     
-    // Create form data for image editing
+    // Create form data for image editing with enhanced parameters
     const formData = new FormData();
     formData.append('image', imageFile);
     formData.append('prompt', prompt);
     formData.append('model', 'provider-3/flux-kontext-dev');
+    formData.append('width', originalDimensions.width.toString());
+    formData.append('height', originalDimensions.height.toString());
+    formData.append('strength', '0.8'); // Higher strength for better quality
+    formData.append('guidance_scale', '7.5'); // Better guidance for quality
     
     // Use direct API call for image editing
     const response = await fetch(`${a4fBaseUrl}/images/edits`, {
@@ -346,7 +378,10 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
         {
           role: 'user',
           content: [
-            { type: "text" as const, text: prompt },
+            { 
+              type: "text" as const, 
+              text: `${prompt}. Please maintain the original aspect ratio and dimensions (${originalDimensions.width}x${originalDimensions.height}). Ensure high quality output.` 
+            },
             {
               type: "image_url" as const,
               image_url: { url: base64Image }
@@ -382,6 +417,18 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
   }
 }
 
+// Helper function to get image dimensions
+function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 export async function* generateAIResponseStream(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   modelId: string,
@@ -403,9 +450,9 @@ export async function* generateAIResponseStream(
       // Check if query should show YouTube videos and get relevant videos
       if (shouldShowVideos(lastUserMessage.content)) {
         try {
-          // Use more specific keywords from the query for better video search
-          const searchQuery = lastUserMessage.content;
-          youtubeVideos = await searchYouTubeVideos(searchQuery, 5);
+          // Extract more specific keywords for better video search
+          const searchQuery = extractVideoSearchKeywords(lastUserMessage.content);
+          youtubeVideos = await searchYouTubeVideos(searchQuery, 3);
           console.log('Found YouTube videos:', youtubeVideos.length);
         } catch (error) {
           console.error('YouTube search failed:', error);

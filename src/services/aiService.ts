@@ -54,7 +54,7 @@ export const AI_MODELS: AIModel[] = [
   {
     id: "gpt-4o",
     name: "GPT-4o",
-    apiModel: "provider-6/gpt-4o",
+    apiModel: "provider-3/gpt-4o-mini",
     description: "OpenAI's powerful multimodal model",
     badge: "Vision"
   },

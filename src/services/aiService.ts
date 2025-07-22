@@ -1,6 +1,7 @@
 
 import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
+import { searchYouTubeVideos, shouldShowVideos } from './youtubeService';
 
 const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
 const a4fBaseUrl = 'https://api.a4f.co/v1';
@@ -10,6 +11,15 @@ const a4fClient = new OpenAI({
   baseURL: a4fBaseUrl,
   dangerouslyAllowBrowser: true
 });
+
+// Store user context for memory
+let userContext: { name?: string; preferences?: Record<string, any> } = {};
+
+export const updateUserContext = (context: Partial<typeof userContext>) => {
+  userContext = { ...userContext, ...context };
+};
+
+export const getUserContext = () => userContext;
 
 export interface AIModel {
   id: string;
@@ -190,6 +200,31 @@ function needsWebSearch(query: string): boolean {
   return webSearchTriggers.some(trigger => trigger.test(query));
 }
 
+// Helper function to extract better search keywords for YouTube videos
+function extractVideoSearchKeywords(query: string): string {
+  // Remove common conversational words and extract key terms
+  const stopWords = ['how', 'can', 'you', 'please', 'show', 'me', 'tell', 'explain', 'what', 'is', 'are', 'the', 'a', 'an', 'and', 'or', 'but'];
+  const words = query.toLowerCase().split(/\s+/);
+  
+  // Keep important terms that indicate what to search for
+  const keywords = words.filter(word => 
+    word.length > 2 && 
+    !stopWords.includes(word) &&
+    !['tutorial', 'video', 'guide'].includes(word) // These will be added back
+  );
+  
+  // Add contextual terms for better results
+  const contextTerms = [];
+  if (query.toLowerCase().includes('how to') || query.toLowerCase().includes('tutorial')) {
+    contextTerms.push('tutorial', 'how to');
+  }
+  if (query.toLowerCase().includes('learn')) {
+    contextTerms.push('beginner guide');
+  }
+  
+  return [...keywords.slice(0, 3), ...contextTerms].join(' ');
+}
+
 // Helper function to convert File to base64
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -296,21 +331,57 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
 }
 
 export async function editImage(imageFile: File, prompt: string): Promise<string> {
-  const editModel = IMAGE_EDIT_MODELS[0]; // Use flux-kontext-dev
-  
   try {
-    console.log('Editing image with model:', editModel.apiModel, 'prompt:', prompt);
+    console.log('Editing image with flux-kontext-dev model, prompt:', prompt);
+    
+    // Get original image dimensions for aspect ratio preservation
+    const originalDimensions = await getImageDimensions(imageFile);
     
     // Convert image to base64
     const base64Image = await fileToBase64(imageFile);
     
-    const response = await a4fClient.chat.completions.create({
-      model: editModel.apiModel,
+    // Create form data for image editing with enhanced parameters
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    formData.append('prompt', prompt);
+    formData.append('model', 'provider-3/flux-kontext-dev');
+    formData.append('width', originalDimensions.width.toString());
+    formData.append('height', originalDimensions.height.toString());
+    formData.append('strength', '0.8'); // Higher strength for better quality
+    formData.append('guidance_scale', '7.5'); // Better guidance for quality
+    
+    // Use direct API call for image editing
+    const response = await fetch(`${a4fBaseUrl}/images/edits`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${a4fApiKey}`,
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    // Check for image URL in the response
+    if (result.data && result.data[0] && result.data[0].url) {
+      console.log('Found edited image URL:', result.data[0].url);
+      return result.data[0].url;
+    }
+    
+    // If no URL found, try using the flux-kontext-dev model with chat API
+    const chatResponse = await a4fClient.chat.completions.create({
+      model: "provider-3/flux-kontext-dev",
       messages: [
         {
           role: 'user',
           content: [
-            { type: "text" as const, text: `Edit this image: ${prompt}` },
+            { 
+              type: "text" as const, 
+              text: `${prompt}. Please maintain the original aspect ratio and dimensions (${originalDimensions.width}x${originalDimensions.height}). Ensure high quality output.` 
+            },
             {
               type: "image_url" as const,
               image_url: { url: base64Image }
@@ -321,31 +392,41 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
       stream: false,
     });
 
-    // For image editing, the response content should contain the edited image URL or data
-    const content = response.choices[0]?.message?.content;
+    const content = chatResponse.choices[0]?.message?.content;
     if (content) {
-      // If the content contains a URL, return it
-      if (content.includes('http')) {
-        const urlMatch = content.match(/https?:\/\/[^\s]+/);
-        if (urlMatch) {
-          console.log('Found edited image URL:', urlMatch[0]);
-          return urlMatch[0];
-        }
+      // Check for image URL in response
+      const urlMatch = content.match(/https?:\/\/[^\s)]+/);
+      if (urlMatch) {
+        console.log('Found edited image URL from chat API:', urlMatch[0]);
+        return urlMatch[0];
       }
-      // If it's base64 data, return it
+      
+      // Check for base64 image
       if (content.startsWith('data:image')) {
         console.log('Found edited base64 image');
         return content;
       }
     }
 
-    console.log('Unexpected edit response structure:', JSON.stringify(response, null, 2));
-    throw new Error('No edited image data found in response');
+    console.log('No image data found in response, returning original image');
+    return URL.createObjectURL(imageFile);
     
   } catch (error) {
     console.error('Image editing error:', error);
     throw new Error(`Failed to edit image: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
+}
+
+// Helper function to get image dimensions
+function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
 }
 
 export async function* generateAIResponseStream(
@@ -354,7 +435,7 @@ export async function* generateAIResponseStream(
   webMode: boolean = false,
   isImageGeneration: boolean = false,
   images?: File[]
-): AsyncGenerator<string, void, unknown> {
+): AsyncGenerator<{ content: string; videos?: any[] }, void, unknown> {
   const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
 
   try {
@@ -362,15 +443,28 @@ export async function* generateAIResponseStream(
     let searchResults: SearchResult[] = [];
     let enhancedMessages = [...messages];
     let isWebSearchTriggered = false;
+    let youtubeVideos: any[] = [];
     
     const lastUserMessage = messages[messages.length - 1];
     if (lastUserMessage?.role === 'user') {
+      // Check if query should show YouTube videos and get relevant videos
+      if (shouldShowVideos(lastUserMessage.content)) {
+        try {
+          // Extract more specific keywords for better video search
+          const searchQuery = extractVideoSearchKeywords(lastUserMessage.content);
+          youtubeVideos = await searchYouTubeVideos(searchQuery, 3);
+          console.log('Found YouTube videos:', youtubeVideos.length);
+        } catch (error) {
+          console.error('YouTube search failed:', error);
+        }
+      }
+
       // Automatic detection or manual web mode
       const shouldSearch = webMode || needsWebSearch(lastUserMessage.content);
       
       if (shouldSearch) {
         try {
-          yield "🔍 Searching the web for real-time information...\n\n";
+          yield { content: "🔍 Searching the web for real-time information...\n\n", videos: youtubeVideos };
           searchResults = await googleSearch(lastUserMessage.content);
           if (searchResults.length > 0) {
             isWebSearchTriggered = true;
@@ -380,11 +474,11 @@ export async function* generateAIResponseStream(
               content: `${lastUserMessage.content}\n\n**Web Search Results:**\n${searchContext}\n\nPlease answer the user's question using the above search results. Present the information as if you knew it directly, highlighting key details with proper formatting. Use markdown to emphasize important data like prices, dates, and sources. If specific data isn't found, mention "No exact data found" and provide the most relevant available information. Never say you don't have real-time access - you do have access through these search results.`
             };
           } else {
-            yield "No relevant search results found. Providing general information...\n\n";
+            yield { content: "No relevant search results found. Providing general information...\n\n", videos: youtubeVideos };
           }
         } catch (error) {
           console.error('Web search failed:', error);
-          yield "Web search temporarily unavailable. Providing general information...\n\n";
+          yield { content: "Web search temporarily unavailable. Providing general information...\n\n", videos: youtubeVideos };
         }
       }
     }
@@ -416,14 +510,29 @@ export async function* generateAIResponseStream(
       }
     }
 
-    // Enhanced system prompt
-    const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities and image understanding.
+    // Extract user name from conversation for memory
+    const userName = userContext.name;
+    const nameFromMessages = enhancedMessages.find(msg => 
+      msg.role === 'user' && 
+      /my name is ([a-zA-Z]+)/i.test(msg.content)
+    )?.content.match(/my name is ([a-zA-Z]+)/i)?.[1];
+    
+    if (nameFromMessages && !userName) {
+      updateUserContext({ name: nameFromMessages });
+    }
+
+    // Enhanced system prompt with user context
+    const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities, image understanding, and YouTube video recommendations.
 
 IMPORTANT: You have access to real-time information through web search results when provided. NEVER say "I don't have real-time access" or "I can't provide current information" - you can and do have access through search results.
 
 You can also see and analyze images that users upload. When users share images, describe what you see and help them with any questions about the images.
 
+${userName ? `USER CONTEXT: The user's name is ${userName}. Remember this information throughout the conversation.` : ''}
+
 ${isWebSearchTriggered ? '🌐 **Web search was performed** - Use the provided search results to give accurate, current information. Present it naturally as if you knew it directly.' : ''}
+
+${youtubeVideos.length > 0 ? `📹 **YouTube videos found** - Relevant educational videos have been provided above your response. Reference these videos when appropriate in your answer.` : ''}
 
 Format your responses using markdown:
 - Use **bold** for important terms and emphasis
@@ -451,18 +560,18 @@ Always provide well-structured, formatted responses that are easy to read and un
       for await (const chunk of response) {
         const content = chunk.choices[0]?.delta?.content;
         if (content) {
-          yield content;
+          yield { content, videos: youtubeVideos };
         }
       }
     } else {
       // Non-streaming response
       const content = response.choices[0]?.message?.content;
       if (content) {
-        yield content;
+        yield { content, videos: youtubeVideos };
       }
     }
   } catch (error) {
     console.error('AI API Stream Error:', error);
-    yield "I'm experiencing some technical difficulties right now. Please try again in a moment.";
+    yield { content: "I'm experiencing some technical difficulties right now. Please try again in a moment.", videos: [] };
   }
 }

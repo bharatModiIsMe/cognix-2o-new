@@ -33,15 +33,15 @@ export const AI_MODELS: AIModel[] = [
   {
     id: "gemini-2.5-pro",
     name: "Gemini 2.5 Pro",
-    apiModel: "provider-1/gemini-2.5-pro",
+    apiModel: "provider-6/gemini-2.5-flash-thinking",
     description: "Google's most advanced model with thinking capabilities",
-    badge: "New-Pro"
+    badge: "Pro"
   },
   {
     id: "cognix-2o-web",
     name: "Cognix-2o Web",
     apiModel: "provider-6/gpt-4o-mini-search-preview",
-    description: "Open AI's model with enhanced search by Cognix",
+    description: "Web-enabled AI with real-time search capabilities",
     badge: "Web"
   },
   {
@@ -54,7 +54,7 @@ export const AI_MODELS: AIModel[] = [
   {
     id: "gpt-4o",
     name: "GPT-4o",
-    apiModel: "provider-3/gpt-4o-mini",
+    apiModel: "provider-6/gpt-4o",
     description: "OpenAI's powerful multimodal model",
     badge: "Vision"
   },

@@ -17,6 +17,7 @@ import {
   Wand2
 } from "lucide-react";
 import { ImageDownloadButton } from "@/components/ImageDownloadButton";
+import { ImageCropper } from "./ImageCropper";
 import { toast } from "sonner";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -55,6 +56,9 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [showImageCropper, setShowImageCropper] = useState(false);
+  const [imageToEdit, setImageToEdit] = useState<string | null>(null);
+  const [editPrompt, setEditPrompt] = useState<string>('');
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
@@ -97,6 +101,29 @@ export function ChatMessage({
     if (selection && selection.toString().trim()) {
       // Could implement "Ask GPT" follow-up here
       console.log("Selected text:", selection.toString());
+    }
+  };
+
+  const handleEditImage = async (imageUrl: string) => {
+    setImageToEdit(imageUrl);
+    setShowImageCropper(true);
+  };
+
+  const handleCroppedImage = async (croppedFile: File) => {
+    try {
+      setShowImageCropper(false);
+      
+      // Convert file to URL for editing
+      const croppedUrl = URL.createObjectURL(croppedFile);
+      
+      // Here you would call your image editing service
+      toast.success('Image cropped successfully! Ready for editing.');
+      
+      // Clean up the blob URL
+      URL.revokeObjectURL(croppedUrl);
+    } catch (error) {
+      console.error('Image cropping error:', error);
+      toast.error('Failed to crop image');
     }
   };
 
@@ -170,18 +197,13 @@ export function ChatMessage({
                     imageName={`cognix-image-${index + 1}`}
                     className="bg-black/50 text-white border-white/20 hover:bg-black/70"
                   />
-                  {message.tools?.includes('edit-image') && (
-                    <button
-                      className="px-2 py-1 bg-black/50 text-white border border-white/20 hover:bg-black/70 rounded text-sm flex items-center gap-1"
-                      onClick={() => {
-                        // Trigger image edit functionality
-                        toast.info('Click the edit button in the chat input to edit this image');
-                      }}
-                    >
-                      <Wand2 className="h-4 w-4" />
-                      Edit Again
-                    </button>
-                  )}
+                  <button
+                    className="px-2 py-1 bg-black/50 text-white border border-white/20 hover:bg-black/70 rounded text-sm flex items-center gap-1"
+                    onClick={() => handleEditImage(image)}
+                  >
+                    <Wand2 className="h-4 w-4" />
+                    Edit
+                  </button>
                 </div>
               </div>
             ))}
@@ -367,6 +389,15 @@ export function ChatMessage({
           <div className="text-xs text-success">
             ✓ Copied to clipboard
           </div>
+        )}
+
+        {imageToEdit && (
+          <ImageCropper
+            isOpen={showImageCropper}
+            onClose={() => setShowImageCropper(false)}
+            imageUrl={imageToEdit}
+            onCrop={handleCroppedImage}
+          />
         )}
       </div>
 

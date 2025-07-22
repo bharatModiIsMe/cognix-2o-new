@@ -46,7 +46,7 @@ export async function textToSpeech(text: string): Promise<ArrayBuffer> {
     console.log('Converting text to speech...');
     
     const completion = await a4fClient.chat.completions.create({
-      model: "provider-3/tts-1",
+      model: "provider-6/sonic-2",
       messages: [
         { role: "user", content: text },
       ],

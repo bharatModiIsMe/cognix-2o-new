@@ -76,23 +76,23 @@ export const AI_MODELS: AIModel[] = [
 
 export const IMAGE_MODELS: AIModel[] = [
   {
-    id: "flux-kontext-dev",
-    name: "FLUX Kontext Dev",
-    apiModel: "provider-3/flux-kontext-dev",
+    id: "flux-1.1-pro",
+    name: "FLUX.1.1-pro",
+    apiModel: "provider-1/FLUX.1.1-pro",
     description: "High-quality image generation",
     badge: "Premium"
   },
   {
-    id: "FLUX.1-kontext-max",
-    name: "FLUX.1-kontext-max",
-    apiModel: "provider-6/FLUX.1-kontext-max",
+    id: "sana-1.5-flash",
+    name: "Sana-1.5-flash",
+    apiModel: "provider-6/sana-1.5-flash",
     description: "Fast image generation",
     badge: "Fast"
   },
   {
-    id: "FLUX.1-pro",
-    name: "FLUX.1-pro",
-    apiModel: "provider-6/FLUX.1-pro",
+    id: "sana-1.5",
+    name: "Sana-1.5",
+    apiModel: "provider-6/sana-1.5",
     description: "Balanced image generation",
     badge: "Balanced"
   },
@@ -132,25 +132,25 @@ export const IMAGE_MODELS: AIModel[] = [
     badge: "Dev"
   },
   {
-    id: "flux-1-schnell",
-    name: "Flux.1-schnell",
-    apiModel: "provider-1/FLUX.1-schnell",
-    description: "Quick image generation",
-    badge: "Quick"
+    id: "flux-kontext-pro",
+    name: "FLUX Kontext Pro",
+    apiModel: "provider-1/FLUX.1-kontext-pro",
+    description: "Context-aware image generation",
+    badge: "Pro"
   },
   {
-    id: "dalle-3",
-    name: "DALL-E 3",
-    apiModel: "dall-e-3",
-    description: "OpenAI's latest image model",
-    badge: "OpenAI"
+    id: "imagen-3.0-generate-002",
+    name: "Imagen 3.0 Gen 002",
+    apiModel: "provider-3/imagen-3.0-generate-002",
+    description: "Imagen 3.0 generation model",
+    badge: "Gen"
   },
   {
-    id: "dalle-2",
-    name: "DALL-E 2",
-    apiModel: "dall-e-2",
-    description: "OpenAI's image generation",
-    badge: "OpenAI"
+    id: "imagen-4.0-generate-preview",
+    name: "Imagen 4.0 Preview",
+    apiModel: "provider-3/imagen-4.0-generate-preview-06-06",
+    description: "Imagen 4.0 preview model",
+    badge: "Preview"
   }
 ];
 

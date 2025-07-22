@@ -41,13 +41,8 @@ export const AI_MODELS: AIModel[] = [
     id: "cognix-2o-web",
     name: "Cognix-2o Web",
     apiModel: "provider-6/gpt-4o-mini-search-preview",
-<<<<<<< HEAD
     description: "Open AI's model with enhanced search by Cognix",
     badge: "Web"
-=======
-    description: "Web-enabled AI with real-time search capabilities",
-    badge: "Web-Latest"
->>>>>>> a267d51ac01fb155c76874c2805d424ff6d4e261
   },
   {
     id: "deepseek-v3",
@@ -59,7 +54,7 @@ export const AI_MODELS: AIModel[] = [
   {
     id: "gpt-4o",
     name: "GPT-4o",
-    apiModel: "provider-6/gpt-4o",
+    apiModel: "provider-3/gpt-4o-mini",
     description: "OpenAI's powerful multimodal model",
     badge: "Vision"
   },

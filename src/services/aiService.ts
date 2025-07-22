@@ -292,21 +292,15 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    // Use the A4F images endpoint instead of chat completions
     const response = await fetch(`${a4fBaseUrl}/images/generations`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${a4fApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: imageModel.apiModel,
-        prompt: prompt,
-        n: 1,
-        size: "1024x1024",
-        quality: "standard",
-        response_format: "url"
-      }),
+      model: imageModel.apiModel,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      stream: false,
     });
 
     // For image generation, the response content should contain the image URL or data

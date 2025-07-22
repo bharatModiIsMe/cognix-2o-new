@@ -59,23 +59,6 @@ export async function textToSpeech(text: string): Promise<ArrayBuffer> {
         return await response.arrayBuffer();
       }
     }
-
-    // Fallback to browser's built-in speech synthesis
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      window.speechSynthesis.speak(utterance);
-    }
-    
-    return new ArrayBuffer(0);
-  } catch (error) {
-    console.error('Text to speech error:', error);
-    
-    // Fallback to browser's built-in speech synthesis
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      window.speechSynthesis.speak(utterance);
-    }
-    
     return new ArrayBuffer(0);
   }
 }

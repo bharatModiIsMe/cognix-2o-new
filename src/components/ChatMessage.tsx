@@ -12,8 +12,12 @@ import {
   Sparkles,
   ChevronDown,
   Save,
-  Volume2
+  Volume2,
+  Download,
+  Wand2
 } from "lucide-react";
+import { ImageDownloadButton } from "@/components/ImageDownloadButton";
+import { toast } from "sonner";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from "@/lib/utils";
@@ -147,14 +151,35 @@ export function ChatMessage({
 
         {/* Images */}
         {message.images && message.images.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {message.images.map((image, index) => (
-              <img
-                key={index}
-                src={image}
-                alt={`Uploaded image ${index + 1}`}
-                className="max-w-xs rounded-lg border border-border"
-              />
+              <div key={index} className="relative group">
+                <img
+                  src={image}
+                  alt={`Generated image ${index + 1}`}
+                  className="w-full rounded-lg border shadow-sm hover:shadow-md transition-shadow"
+                  style={{ maxHeight: "400px", objectFit: "contain" }}
+                />
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                  <ImageDownloadButton 
+                    imageUrl={image} 
+                    imageName={`cognix-image-${index + 1}`}
+                    className="bg-black/50 text-white border-white/20 hover:bg-black/70"
+                  />
+                  {message.tools?.includes('edit-image') && (
+                    <button
+                      className="px-2 py-1 bg-black/50 text-white border border-white/20 hover:bg-black/70 rounded text-sm flex items-center gap-1"
+                      onClick={() => {
+                        // Trigger image edit functionality
+                        toast.info('Click the edit button in the chat input to edit this image');
+                      }}
+                    >
+                      <Wand2 className="h-4 w-4" />
+                      Edit Again
+                    </button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}

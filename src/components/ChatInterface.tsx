@@ -7,6 +7,7 @@ import { AskCognixPopover } from "@/components/AskCognixPopover";
 import { YouTubeVideoGrid } from "@/components/YouTubeVideoGrid";
 import { YouTubeVideoPlayer } from "@/components/YouTubeVideoPlayer";
 import { generateAIResponseStream, generateImage, editImage, AI_MODELS, IMAGE_MODELS } from "@/services/aiService";
+import { generateVideo, shouldGenerateVideo } from "@/services/videoService";
 import { YouTubeVideo } from "@/services/youtubeService";
 export interface Message {
   id: string;
@@ -71,6 +72,11 @@ export function ChatInterface({ onSaveChat, onChatHistory }: ChatInterfaceProps 
     const contentLower = content.toLowerCase();
     return editKeywords.some(keyword => contentLower.includes(keyword));
   };
+
+  // Smart video generation detection
+  const detectVideoGeneration = (content: string): boolean => {
+    return shouldGenerateVideo(content);
+  };
   const handleSendMessage = async (content: string, images?: File[], tools?: string[]) => {
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -85,6 +91,7 @@ export function ChatInterface({ onSaveChat, onChatHistory }: ChatInterfaceProps 
     // Check if image generation tool is selected OR smart detection
     const isImageGeneration = tools?.includes('Generate Image') || detectImageGeneration(content);
     const isImageEditing = imageEditingFile && detectImageEditing(content);
+    const isVideoGeneration = tools?.includes('Generate Video') || detectVideoGeneration(content);
     setIsGenerating(true);
     const controller = new AbortController();
     setAbortController(controller);
@@ -94,6 +101,9 @@ export function ChatInterface({ onSaveChat, onChatHistory }: ChatInterfaceProps 
     } else if (isImageEditing && imageEditingFile) {
       // Handle image editing
       await handleImageEditingRequest(content, imageEditingFile, controller);
+    } else if (isVideoGeneration) {
+      // Handle video generation
+      await handleVideoGeneration(content, controller);
     } else {
       // Create AI response message
       const assistantMessage: Message = {
@@ -196,6 +206,48 @@ export function ChatInterface({ onSaveChat, onChatHistory }: ChatInterfaceProps 
       setIsGenerating(false);
       setAbortController(null);
       setImageEditingFile(null);
+    }
+  };
+
+  const handleVideoGeneration = async (prompt: string, controller: AbortController) => {
+    // Create AI response message for video generation
+    const assistantMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      type: 'assistant',
+      content: 'Generating video...',
+      timestamp: new Date(),
+      model: 'wan-2.1',
+      isTyping: true
+    };
+    setMessages(prev => [...prev, assistantMessage]);
+
+    try {
+      const videoUrl = await generateVideo(prompt);
+      if (controller.signal.aborted) return;
+
+      // Update message with generated video
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantMessage.id ? {
+          ...msg,
+          content: `Here's your generated video:`,
+          images: [videoUrl], // We'll display video as image for now
+          tools: ['generate-video'],
+          isTyping: false
+        } : msg
+      ));
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error('Error generating video:', error);
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantMessage.id ? {
+          ...msg,
+          content: "I'm sorry, I couldn't generate the video. Please try again with a different prompt.",
+          isTyping: false
+        } : msg
+      ));
+    } finally {
+      setIsGenerating(false);
+      setAbortController(null);
     }
   };
   const generateRealAIResponse = async (messageId: string, userInput: string, modelId: string, controller: AbortController, images?: File[]) => {

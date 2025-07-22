@@ -12,7 +12,8 @@ import {
   Square,
   Edit,
   Mic,
-  MicOff
+  MicOff,
+  Video
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,7 @@ interface Tool {
 
 const tools: Tool[] = [
   { id: "Generate Image", name: "Generate Image", icon: Wand2, color: "text-purple-500" },
+  { id: "Generate Video", name: "Generate Video", icon: Video, color: "text-red-500" },
   { id: "write-story", name: "Write Story", icon: PenTool, color: "text-blue-500" },
   { id: "summarize-text", name: "Summarize Text", icon: FileText, color: "text-green-500" },
   { id: "build-webpage", name: "Build Web Page", icon: Globe, color: "text-orange-500" }

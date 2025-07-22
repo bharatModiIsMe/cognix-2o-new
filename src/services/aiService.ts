@@ -400,10 +400,13 @@ export async function* generateAIResponseStream(
     
     const lastUserMessage = messages[messages.length - 1];
     if (lastUserMessage?.role === 'user') {
-      // Check if query should show YouTube videos
+      // Check if query should show YouTube videos and get relevant videos
       if (shouldShowVideos(lastUserMessage.content)) {
         try {
-          youtubeVideos = await searchYouTubeVideos(lastUserMessage.content, 3);
+          // Use more specific keywords from the query for better video search
+          const searchQuery = lastUserMessage.content;
+          youtubeVideos = await searchYouTubeVideos(searchQuery, 5);
+          console.log('Found YouTube videos:', youtubeVideos.length);
         } catch (error) {
           console.error('YouTube search failed:', error);
         }
@@ -472,7 +475,7 @@ export async function* generateAIResponseStream(
     }
 
     // Enhanced system prompt with user context
-    const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities and image understanding.
+    const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities, image understanding, and YouTube video recommendations.
 
 IMPORTANT: You have access to real-time information through web search results when provided. NEVER say "I don't have real-time access" or "I can't provide current information" - you can and do have access through search results.
 
@@ -481,6 +484,8 @@ You can also see and analyze images that users upload. When users share images, 
 ${userName ? `USER CONTEXT: The user's name is ${userName}. Remember this information throughout the conversation.` : ''}
 
 ${isWebSearchTriggered ? '🌐 **Web search was performed** - Use the provided search results to give accurate, current information. Present it naturally as if you knew it directly.' : ''}
+
+${youtubeVideos.length > 0 ? `📹 **YouTube videos found** - Relevant educational videos have been provided above your response. Reference these videos when appropriate in your answer.` : ''}
 
 Format your responses using markdown:
 - Use **bold** for important terms and emphasis

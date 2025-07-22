@@ -4,7 +4,10 @@ import { ChatMessage } from "@/components/ChatMessage";
 import { ExportDialog } from "@/components/ExportDialog";
 import { FloatingModelSelector } from "@/components/FloatingModelSelector";
 import { AskCognixPopover } from "@/components/AskCognixPopover";
+import { YouTubeVideoGrid } from "@/components/YouTubeVideoGrid";
+import { YouTubeVideoPlayer } from "@/components/YouTubeVideoPlayer";
 import { generateAIResponseStream, generateImage, editImage, AI_MODELS, IMAGE_MODELS } from "@/services/aiService";
+import { YouTubeVideo } from "@/services/youtubeService";
 export interface Message {
   id: string;
   type: 'user' | 'assistant';
@@ -16,6 +19,7 @@ export interface Message {
   isTyping?: boolean;
   liked?: boolean;
   disliked?: boolean;
+  videos?: YouTubeVideo[];
 }
 interface SavedChat {
   id: string;
@@ -24,7 +28,12 @@ interface SavedChat {
   messages: Message[];
 }
 
-export function ChatInterface() {
+interface ChatInterfaceProps {
+  onSaveChat?: (chat: SavedChat) => void;
+  onChatHistory?: (chat: SavedChat) => void;
+}
+
+export function ChatInterface({ onSaveChat, onChatHistory }: ChatInterfaceProps = {}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedModel, setSelectedModel] = useState("gemini-2.5-pro");
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -38,6 +47,7 @@ export function ChatInterface() {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [imageEditingFile, setImageEditingFile] = useState<File | null>(null);
   const [savedChats, setSavedChats] = useState<SavedChat[]>([]);
+  const [selectedVideo, setSelectedVideo] = useState<YouTubeVideo | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({
@@ -196,12 +206,17 @@ export function ChatInterface() {
       }];
       const stream = generateAIResponseStream(messages, modelId, webMode, false, images);
       let fullResponse = '';
+      let responseVideos: YouTubeVideo[] = [];
       for await (const chunk of stream) {
         if (controller.signal.aborted) return;
-        fullResponse += chunk;
+        fullResponse += chunk.content;
+        if (chunk.videos && responseVideos.length === 0) {
+          responseVideos = chunk.videos;
+        }
         setMessages(prev => prev.map(msg => msg.id === messageId ? {
           ...msg,
           content: fullResponse,
+          videos: responseVideos,
           isTyping: false
         } : msg));
         await new Promise(resolve => setTimeout(resolve, 30)); // Typing effect
@@ -367,7 +382,24 @@ At this time, we are facing some issues and bugs in the app so please report the
               </div>
             </div>
           </div> : <>
-            {messages.map(message => <ChatMessage key={message.id} message={message} onLike={isLiked => handleLikeMessage(message.id, isLiked)} onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} onExport={() => setIsExportOpen(true)} onSave={() => handleSaveChat(message.id)} />)}
+            {messages.map(message => (
+              <div key={message.id}>
+                {message.videos && message.videos.length > 0 && (
+                  <YouTubeVideoGrid 
+                    videos={message.videos} 
+                    onVideoClick={setSelectedVideo}
+                  />
+                )}
+                <ChatMessage 
+                  message={message} 
+                  onLike={isLiked => handleLikeMessage(message.id, isLiked)} 
+                  onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} 
+                  onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} 
+                  onExport={() => setIsExportOpen(true)} 
+                  onSave={() => handleSaveChat(message.id)} 
+                />
+              </div>
+            ))}
             <div ref={messagesEndRef} />
           </>}
       </div>
@@ -387,5 +419,11 @@ At this time, we are facing some issues and bugs in the app so please report the
 
       {/* Export dialog */}
       <ExportDialog isOpen={isExportOpen} onOpenChange={setIsExportOpen} messages={messages} selectedModel={selectedModel} />
+      
+      {/* YouTube Video Player */}
+      <YouTubeVideoPlayer 
+        video={selectedVideo} 
+        onClose={() => setSelectedVideo(null)} 
+      />
     </div>;
 }

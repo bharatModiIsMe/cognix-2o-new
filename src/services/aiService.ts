@@ -1,6 +1,7 @@
 
 import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
+import { searchYouTubeVideos, shouldShowVideos } from './youtubeService';
 
 const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
 const a4fBaseUrl = 'https://api.a4f.co/v1';
@@ -10,6 +11,15 @@ const a4fClient = new OpenAI({
   baseURL: a4fBaseUrl,
   dangerouslyAllowBrowser: true
 });
+
+// Store user context for memory
+let userContext: { name?: string; preferences?: Record<string, any> } = {};
+
+export const updateUserContext = (context: Partial<typeof userContext>) => {
+  userContext = { ...userContext, ...context };
+};
+
+export const getUserContext = () => userContext;
 
 export interface AIModel {
   id: string;
@@ -378,7 +388,7 @@ export async function* generateAIResponseStream(
   webMode: boolean = false,
   isImageGeneration: boolean = false,
   images?: File[]
-): AsyncGenerator<string, void, unknown> {
+): AsyncGenerator<{ content: string; videos?: any[] }, void, unknown> {
   const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
 
   try {
@@ -386,15 +396,25 @@ export async function* generateAIResponseStream(
     let searchResults: SearchResult[] = [];
     let enhancedMessages = [...messages];
     let isWebSearchTriggered = false;
+    let youtubeVideos: any[] = [];
     
     const lastUserMessage = messages[messages.length - 1];
     if (lastUserMessage?.role === 'user') {
+      // Check if query should show YouTube videos
+      if (shouldShowVideos(lastUserMessage.content)) {
+        try {
+          youtubeVideos = await searchYouTubeVideos(lastUserMessage.content, 3);
+        } catch (error) {
+          console.error('YouTube search failed:', error);
+        }
+      }
+
       // Automatic detection or manual web mode
       const shouldSearch = webMode || needsWebSearch(lastUserMessage.content);
       
       if (shouldSearch) {
         try {
-          yield "🔍 Searching the web for real-time information...\n\n";
+          yield { content: "🔍 Searching the web for real-time information...\n\n", videos: youtubeVideos };
           searchResults = await googleSearch(lastUserMessage.content);
           if (searchResults.length > 0) {
             isWebSearchTriggered = true;
@@ -404,11 +424,11 @@ export async function* generateAIResponseStream(
               content: `${lastUserMessage.content}\n\n**Web Search Results:**\n${searchContext}\n\nPlease answer the user's question using the above search results. Present the information as if you knew it directly, highlighting key details with proper formatting. Use markdown to emphasize important data like prices, dates, and sources. If specific data isn't found, mention "No exact data found" and provide the most relevant available information. Never say you don't have real-time access - you do have access through these search results.`
             };
           } else {
-            yield "No relevant search results found. Providing general information...\n\n";
+            yield { content: "No relevant search results found. Providing general information...\n\n", videos: youtubeVideos };
           }
         } catch (error) {
           console.error('Web search failed:', error);
-          yield "Web search temporarily unavailable. Providing general information...\n\n";
+          yield { content: "Web search temporarily unavailable. Providing general information...\n\n", videos: youtubeVideos };
         }
       }
     }
@@ -440,12 +460,25 @@ export async function* generateAIResponseStream(
       }
     }
 
-    // Enhanced system prompt
+    // Extract user name from conversation for memory
+    const userName = userContext.name;
+    const nameFromMessages = enhancedMessages.find(msg => 
+      msg.role === 'user' && 
+      /my name is ([a-zA-Z]+)/i.test(msg.content)
+    )?.content.match(/my name is ([a-zA-Z]+)/i)?.[1];
+    
+    if (nameFromMessages && !userName) {
+      updateUserContext({ name: nameFromMessages });
+    }
+
+    // Enhanced system prompt with user context
     const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities and image understanding.
 
 IMPORTANT: You have access to real-time information through web search results when provided. NEVER say "I don't have real-time access" or "I can't provide current information" - you can and do have access through search results.
 
 You can also see and analyze images that users upload. When users share images, describe what you see and help them with any questions about the images.
+
+${userName ? `USER CONTEXT: The user's name is ${userName}. Remember this information throughout the conversation.` : ''}
 
 ${isWebSearchTriggered ? '🌐 **Web search was performed** - Use the provided search results to give accurate, current information. Present it naturally as if you knew it directly.' : ''}
 
@@ -475,18 +508,18 @@ Always provide well-structured, formatted responses that are easy to read and un
       for await (const chunk of response) {
         const content = chunk.choices[0]?.delta?.content;
         if (content) {
-          yield content;
+          yield { content, videos: youtubeVideos };
         }
       }
     } else {
       // Non-streaming response
       const content = response.choices[0]?.message?.content;
       if (content) {
-        yield content;
+        yield { content, videos: youtubeVideos };
       }
     }
   } catch (error) {
     console.error('AI API Stream Error:', error);
-    yield "I'm experiencing some technical difficulties right now. Please try again in a moment.";
+    yield { content: "I'm experiencing some technical difficulties right now. Please try again in a moment.", videos: [] };
   }
 }

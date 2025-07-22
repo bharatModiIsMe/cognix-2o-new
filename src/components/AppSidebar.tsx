@@ -27,18 +27,13 @@ interface AppSidebarProps {
   onClose?: () => void;
   onSaveChat?: (chat: SavedChat) => void;
   savedChats?: SavedChat[];
+  chatHistory?: SavedChat[];
 }
 
-export function AppSidebar({ onNewChat, onClearHistory, onClose, savedChats = [] }: AppSidebarProps) {
+export function AppSidebar({ onNewChat, onClearHistory, onClose, savedChats = [], chatHistory = [] }: AppSidebarProps) {
   const isMobile = useIsMobile();
   const [isOpen, setIsOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const [recentChats] = useState([
-    { id: 1, title: "Web Development Tips", timestamp: "2 hours ago" },
-    { id: 2, title: "AI Model Comparison", timestamp: "1 day ago" },
-    { id: 3, title: "React Best Practices", timestamp: "3 days ago" },
-    { id: 4, title: "UI/UX Design Trends", timestamp: "1 week ago" },
-  ]);
 
   const [showSaved, setShowSaved] = useState(false);
 
@@ -153,25 +148,31 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose, savedChats = []
               Recent Chats
             </h3>
             <div className="space-y-1">
-              {recentChats.map((chat) => (
-                <div
-                  key={chat.id}
-                  className="group flex items-center gap-3 p-3 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer"
-                >
-                  <FileText className="w-4 h-4 text-sidebar-foreground/50 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-sidebar-foreground truncate">
-                      {chat.title}
-                    </p>
-                    <p className="text-xs text-sidebar-foreground/50">
-                      {chat.timestamp}
-                    </p>
-                  </div>
-                  <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-sidebar-border rounded transition-all shrink-0">
-                    <Trash2 className="w-3 h-3 text-sidebar-foreground/50" />
-                  </button>
+              {chatHistory.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-sidebar-foreground/50">
+                  No recent chats
                 </div>
-              ))}
+              ) : (
+                chatHistory.map((chat) => (
+                  <div
+                    key={chat.id}
+                    className="group flex items-center gap-3 p-3 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-sidebar-foreground/50 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-sidebar-foreground truncate">
+                        {chat.title}
+                      </p>
+                      <p className="text-xs text-sidebar-foreground/50">
+                        {chat.timestamp}
+                      </p>
+                    </div>
+                    <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-sidebar-border rounded transition-all shrink-0">
+                      <Trash2 className="w-3 h-3 text-sidebar-foreground/50" />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}

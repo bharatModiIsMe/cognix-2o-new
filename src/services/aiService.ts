@@ -33,7 +33,7 @@ export const AI_MODELS: AIModel[] = [
   {
     id: "gemini-2.5-pro",
     name: "Gemini 2.5 Pro",
-    apiModel: "provider-6/gemini-2.5-flash-thinking",
+    apiModel: "provider-1/gemini-2.5-pro",
     description: "Google's most advanced model with thinking capabilities",
     badge: "Pro"
   },

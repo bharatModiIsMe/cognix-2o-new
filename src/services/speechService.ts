@@ -48,7 +48,13 @@ export async function textToSpeech(text: string): Promise<ArrayBuffer> {
     const response = await fetch(`${a4fBaseUrl}/audio/speech`, {{
       model: "provider-6/sonic-2",
       messages: [
-        { role: "user", content: text },
+        { role: "user", content:  },
+    voice="alloy",
+    input="Hello, world! This is a test of the A4F text-to-speech API."
+)
+
+response.stream_to_file("speech.mp3")
+print("Audio saved to speech.mp3")
       ],
     });
 

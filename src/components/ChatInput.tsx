@@ -10,7 +10,9 @@ import {
   FileText,
   Globe,
   Square,
-  Edit
+  Edit,
+  Mic,
+  MicOff
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +56,8 @@ export function ChatInput({
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -123,6 +127,56 @@ export function ChatInput({
     const imageFile = images[index];
     if (imageFile && onImageEdit) {
       onImageEdit(imageFile);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const audioChunks: Blob[] = [];
+
+      recorder.ondataavailable = (event) => {
+        audioChunks.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        
+        // Import speech service and convert to text
+        try {
+          const { speechToText } = await import('@/services/speechService');
+          const text = await speechToText(audioBlob);
+          setInput(text);
+        } catch (error) {
+          console.error('Speech to text error:', error);
+        }
+
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      setMediaRecorder(null);
+    }
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
     }
   };
 
@@ -320,6 +374,21 @@ export function ChatInput({
             disabled={disabled}
           >
             <Globe className="w-5 h-5" />
+          </button>
+
+          {/* Microphone */}
+          <button
+            onClick={toggleRecording}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              isRecording 
+                ? "text-red-500 bg-red-500/10 hover:bg-red-500/20" 
+                : "text-muted-foreground hover:bg-accent"
+            )}
+            disabled={disabled}
+            title={isRecording ? "Stop recording" : "Start voice recording"}
+          >
+            {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
           </button>
 
           {/* Image upload */}

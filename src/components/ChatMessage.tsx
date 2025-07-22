@@ -10,7 +10,9 @@ import {
   User,
   Bot,
   Sparkles,
-  ChevronDown
+  ChevronDown,
+  Save,
+  Volume2
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -52,6 +54,36 @@ export function ChatMessage({
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSave = () => {
+    const element = document.createElement('a');
+    const file = new Blob([message.content], { type: 'text/plain' });
+    element.href = URL.createObjectURL(file);
+    element.download = `cognix-message-${message.id}.txt`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
+  const handleReadAloud = async () => {
+    try {
+      const { textToSpeech } = await import('@/services/speechService');
+      const audioBuffer = await textToSpeech(message.content);
+      
+      // Create audio from buffer and play
+      const audioBlob = new Blob([audioBuffer], { type: 'audio/mp3' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audio.play();
+      
+      // Clean up URL when audio ends
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+      };
+    } catch (error) {
+      console.error('Text to speech error:', error);
+    }
   };
 
   const handleTextSelection = () => {
@@ -194,6 +226,22 @@ export function ChatMessage({
               title="Copy message"
             >
               <Copy className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={handleSave}
+              className="p-2 hover:bg-accent rounded-lg transition-colors"
+              title="Save message"
+            >
+              <Save className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={handleReadAloud}
+              className="p-2 hover:bg-accent rounded-lg transition-colors"
+              title="Read aloud"
+            >
+              <Volume2 className="w-4 h-4" />
             </button>
 
             <button

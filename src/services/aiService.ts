@@ -296,21 +296,20 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
 }
 
 export async function editImage(imageFile: File, prompt: string): Promise<string> {
-  const editModel = IMAGE_EDIT_MODELS[0]; // Use flux-kontext-dev
-  
   try {
-    console.log('Editing image with model:', editModel.apiModel, 'prompt:', prompt);
+    console.log('Editing image with flux-kontext-dev model, prompt:', prompt);
     
     // Convert image to base64
     const base64Image = await fileToBase64(imageFile);
     
+    // Use A4F flux-kontext-dev model directly for image editing
     const response = await a4fClient.chat.completions.create({
-      model: editModel.apiModel,
+      model: "provider-3/flux-kontext-dev",
       messages: [
         {
           role: 'user',
           content: [
-            { type: "text" as const, text: `Edit this image: ${prompt}` },
+            { type: "text" as const, text: prompt },
             {
               type: "image_url" as const,
               image_url: { url: base64Image }

@@ -76,9 +76,9 @@ export const AI_MODELS: AIModel[] = [
 
 export const IMAGE_MODELS: AIModel[] = [
   {
-    id: "FLUX.1-kontext-max",
-    name: "FLUX.1-kontext-max",
-    apiModel: "provider-6/FLUX.1-kontext-max",
+    id: "flux-1.1-pro",
+    name: "FLUX.1.1-pro",
+    apiModel: "provider-1/FLUX.1.1-pro",
     description: "High-quality image generation",
     badge: "Pro-Model"
   },

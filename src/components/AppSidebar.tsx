@@ -102,7 +102,7 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose, savedChats = []
         {(isOpen || isMobile) ? (
           <div className="flex items-center gap-3 w-full justify-center">
             <img 
-              src="/cognix-logo/a460ef73-e8ad-48b7-a3a3-78634c280e71.png" 
+              src="/lovable-uploads/a460ef73-e8ad-48b7-a3a3-78634c280e71.png" 
               alt="Cognix Logo"
               className="w-8 h-8 shrink-0"
             />
@@ -111,7 +111,7 @@ export function AppSidebar({ onNewChat, onClearHistory, onClose, savedChats = []
         ) : (
           <div className="flex items-center justify-center w-full">
             <img 
-              src="cognix-logo/a460ef73-e8ad-48b7-a3a3-78634c280e71.png" 
+              src="/lovable-uploads/a460ef73-e8ad-48b7-a3a3-78634c280e71.png" 
               alt="Cognix Logo"
               className="w-8 h-8"
             />

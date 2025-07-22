@@ -1,18 +1,17 @@
-# Welcome to your Lovable project
+# Welcome to your Cognix
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/97c6e030-4b75-47da-9308-9de0b3e8debc
+**URL**: https://cognix-2o-new.vercel.app
 
 ## How can I edit this code?
 
 There are several ways of editing your application.
 
-**Use Lovable**
+**VS Code**
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/97c6e030-4b75-47da-9308-9de0b3e8debc) and start prompting.
+Simply visit the github repository and start cloning.
 
-Changes made via Lovable will be committed automatically to this repo.
 
 **Use your preferred IDE**
 
@@ -62,12 +61,11 @@ This project is built with:
 
 ## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/97c6e030-4b75-47da-9308-9de0b3e8debc) and click on Share -> Publish.
+Simply open vercel.com and click on Share -> Publish.
 
-## Can I connect a custom domain to my Lovable project?
+## Can I connect a custom domain to my Vercel project?
 
 Yes, you can!
 
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)

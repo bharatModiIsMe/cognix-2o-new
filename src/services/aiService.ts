@@ -76,53 +76,11 @@ export const AI_MODELS: AIModel[] = [
 
 export const IMAGE_MODELS: AIModel[] = [
   {
-    id: "flux-1.1-pro",
-    name: "FLUX.1.1-pro",
-    apiModel: "provider-1/FLUX.1.1-pro",
+    id: "flux-kontext-dev",
+    name: "FLUX Kontext Dev",
+    apiModel: "provider-3/flux-kontext-dev",
     description: "High-quality image generation",
-    badge: "Pro-Model"
-  },
-  {
-    id: "FLUX.1-kontext-max",
-    name: "FLUX.1-kontext-max",
-    apiModel: "provider-6/FLUX.1-kontext-max",
-    description: "Fast image generation",
-    badge: "Fast"
-  },
-  {
-    id: "FLUX.1-pro",
-    name: "FLUX.1-pro",
-    apiModel: "provider-6/FLUX.1-pro",
-    description: "Balanced image generation",
-    badge: "Balanced"
-  },
-  {
-    id: "flux-1-schnell",
-    name: "Flux.1-schnell",
-    apiModel: "provider-1/FLUX.1-schnell",
-    description: "Quick image generation",
-    badge: "Quick"
-  },
-  {
-    id: "flux-1-schnell-v2",
-    name: "Flux.1-schnell-v2",
-    apiModel: "provider-2/FLUX.1-schnell-v2",
-    description: "Latest quick image generation",
-    badge: "Quick"
-  },
-  {
-    id: "imagen-4",
-    name: "Imagen-4",
-    apiModel: "provider-4/imagen-4",
-    description: "Google's latest image model",
-    badge: "Google"
-  },
-  {
-    id: "imagen-3",
-    name: "Imagen-3",
-    apiModel: "provider-4/imagen-3",
-    description: "Google's image generation",
-    badge: "Google"
+    badge: "Pro"
   },
   {
     id: "flux-1-dev",
@@ -132,25 +90,25 @@ export const IMAGE_MODELS: AIModel[] = [
     badge: "Dev"
   },
   {
-    id: "flux-kontext-pro",
-    name: "FLUX Kontext Pro",
-    apiModel: "provider-1/FLUX.1-kontext-pro",
-    description: "Context-aware image generation",
-    badge: "Pro"
+    id: "flux-1-schnell",
+    name: "Flux.1-schnell",
+    apiModel: "provider-1/FLUX.1-schnell",
+    description: "Quick image generation",
+    badge: "Quick"
   },
   {
-    id: "imagen-3.0-generate-002",
-    name: "Imagen 3.0 Gen 002",
-    apiModel: "provider-3/imagen-3.0-generate-002",
-    description: "Imagen 3.0 generation model",
-    badge: "Gen"
+    id: "dalle-3",
+    name: "DALL-E 3",
+    apiModel: "dall-e-3",
+    description: "OpenAI's latest image model",
+    badge: "OpenAI"
   },
   {
-    id: "imagen-4.0-generate-preview",
-    name: "Imagen 4.0 Preview",
-    apiModel: "provider-3/imagen-4.0-generate-preview-06-06",
-    description: "Imagen 4.0 preview model",
-    badge: "Preview"
+    id: "dalle-2",
+    name: "DALL-E 2",
+    apiModel: "dall-e-2",
+    description: "OpenAI's image generation",
+    badge: "OpenAI"
   }
 ];
 

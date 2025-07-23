@@ -340,7 +340,7 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
 
 export async function editImage(imageFile: File, prompt: string): Promise<string> {
   try {
-    console.log('Editing image with flux-kontext-dev model, prompt:', prompt);
+    console.log('Editing image with black-forest-labs-flux-1-kontext-max model, prompt:', prompt);
     
     // Get original image dimensions for aspect ratio preservation
     const originalDimensions = await getImageDimensions(imageFile);
@@ -379,7 +379,7 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
       return result.data[0].url;
     }
     
-    // If no URL found, try using the flux-kontext-dev model with chat API
+    // If no URL found, try using the black-forest-labs-flux-1-kontext-max model with chat API
     const chatResponse = await a4fClient.chat.completions.create({
       model: "provider-6/black-forest-labs-flux-1-kontext-max",
       messages: [

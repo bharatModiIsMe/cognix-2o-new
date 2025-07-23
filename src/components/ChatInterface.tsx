@@ -178,7 +178,7 @@ export function ChatInterface({ onSaveChat, onChatHistory }: ChatInterfaceProps 
       type: 'assistant',
       content: 'Editing image...',
       timestamp: new Date(),
-      model: 'flux-kontext-dev',
+      model: 'black-forest-labs-flux-1-kontext-max',
       isTyping: true
     };
     setMessages(prev => [...prev, assistantMessage]);

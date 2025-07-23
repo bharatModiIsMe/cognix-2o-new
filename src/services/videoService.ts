@@ -10,7 +10,7 @@ export async function generateVideo(prompt: string): Promise<string> {
   try {
     console.log('Generating video with prompt:', prompt);
     
-    const completion = await client.chat.completions.create({
+    const response = await fetch(`${a4fBaseUrl}/video/generation`, {
       model: "wan-2.1",
       messages: [
         {

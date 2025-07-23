@@ -4,7 +4,11 @@ import { ChatMessage } from "@/components/ChatMessage";
 import { ExportDialog } from "@/components/ExportDialog";
 import { FloatingModelSelector } from "@/components/FloatingModelSelector";
 import { AskCognixPopover } from "@/components/AskCognixPopover";
+import { YouTubeVideoGrid } from "@/components/YouTubeVideoGrid";
+import { YouTubeVideoPlayer } from "@/components/YouTubeVideoPlayer";
 import { generateAIResponseStream, generateImage, editImage, AI_MODELS, IMAGE_MODELS } from "@/services/aiService";
+import { generateVideo, shouldGenerateVideo } from "@/services/videoService";
+import { YouTubeVideo } from "@/services/youtubeService";
 export interface Message {
   id: string;
   type: 'user' | 'assistant';
@@ -16,8 +20,21 @@ export interface Message {
   isTyping?: boolean;
   liked?: boolean;
   disliked?: boolean;
+  videos?: YouTubeVideo[];
 }
-export function ChatInterface() {
+interface SavedChat {
+  id: string;
+  title: string;
+  timestamp: string;
+  messages: Message[];
+}
+
+interface ChatInterfaceProps {
+  onSaveChat?: (chat: SavedChat) => void;
+  onChatHistory?: (chat: SavedChat) => void;
+}
+
+export function ChatInterface({ onSaveChat, onChatHistory }: ChatInterfaceProps = {}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedModel, setSelectedModel] = useState("gemini-2.5-pro");
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -30,6 +47,8 @@ export function ChatInterface() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [imageEditingFile, setImageEditingFile] = useState<File | null>(null);
+  const [savedChats, setSavedChats] = useState<SavedChat[]>([]);
+  const [selectedVideo, setSelectedVideo] = useState<YouTubeVideo | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({
@@ -53,6 +72,11 @@ export function ChatInterface() {
     const contentLower = content.toLowerCase();
     return editKeywords.some(keyword => contentLower.includes(keyword));
   };
+
+  // Smart video generation detection
+  const detectVideoGeneration = (content: string): boolean => {
+    return shouldGenerateVideo(content);
+  };
   const handleSendMessage = async (content: string, images?: File[], tools?: string[]) => {
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -67,6 +91,7 @@ export function ChatInterface() {
     // Check if image generation tool is selected OR smart detection
     const isImageGeneration = tools?.includes('Generate Image') || detectImageGeneration(content);
     const isImageEditing = imageEditingFile && detectImageEditing(content);
+    const isVideoGeneration = tools?.includes('Generate Video') || detectVideoGeneration(content);
     setIsGenerating(true);
     const controller = new AbortController();
     setAbortController(controller);
@@ -76,6 +101,9 @@ export function ChatInterface() {
     } else if (isImageEditing && imageEditingFile) {
       // Handle image editing
       await handleImageEditingRequest(content, imageEditingFile, controller);
+    } else if (isVideoGeneration) {
+      // Handle video generation
+      await handleVideoGeneration(content, controller);
     } else {
       // Create AI response message
       const assistantMessage: Message = {
@@ -180,6 +208,48 @@ export function ChatInterface() {
       setImageEditingFile(null);
     }
   };
+
+  const handleVideoGeneration = async (prompt: string, controller: AbortController) => {
+    // Create AI response message for video generation
+    const assistantMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      type: 'assistant',
+      content: 'Generating video...',
+      timestamp: new Date(),
+      model: 'wan-2.1',
+      isTyping: true
+    };
+    setMessages(prev => [...prev, assistantMessage]);
+
+    try {
+      const videoUrl = await generateVideo(prompt);
+      if (controller.signal.aborted) return;
+
+      // Update message with generated video
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantMessage.id ? {
+          ...msg,
+          content: `Here's your generated video:`,
+          images: [videoUrl], // We'll display video as image for now
+          tools: ['generate-video'],
+          isTyping: false
+        } : msg
+      ));
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error('Error generating video:', error);
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantMessage.id ? {
+          ...msg,
+          content: "I'm sorry, I couldn't generate the video. Please try again with a different prompt.",
+          isTyping: false
+        } : msg
+      ));
+    } finally {
+      setIsGenerating(false);
+      setAbortController(null);
+    }
+  };
   const generateRealAIResponse = async (messageId: string, userInput: string, modelId: string, controller: AbortController, images?: File[]) => {
     try {
       const messages = [{
@@ -188,12 +258,17 @@ export function ChatInterface() {
       }];
       const stream = generateAIResponseStream(messages, modelId, webMode, false, images);
       let fullResponse = '';
+      let responseVideos: YouTubeVideo[] = [];
       for await (const chunk of stream) {
         if (controller.signal.aborted) return;
-        fullResponse += chunk;
+        fullResponse += chunk.content;
+        if (chunk.videos && responseVideos.length === 0) {
+          responseVideos = chunk.videos;
+        }
         setMessages(prev => prev.map(msg => msg.id === messageId ? {
           ...msg,
           content: fullResponse,
+          videos: responseVideos,
           isTyping: false
         } : msg));
         await new Promise(resolve => setTimeout(resolve, 30)); // Typing effect
@@ -318,6 +393,24 @@ export function ChatInterface() {
       }
     }));
   };
+
+  const handleSaveChat = (messageId: string) => {
+    if (messages.length === 0) return;
+    
+    const firstUserMessage = messages.find(m => m.type === 'user')?.content || 'Untitled Chat';
+    const title = firstUserMessage.length > 50 
+      ? firstUserMessage.substring(0, 50) + '...' 
+      : firstUserMessage;
+    
+    const newSavedChat: SavedChat = {
+      id: Date.now().toString(),
+      title,
+      timestamp: new Date().toLocaleDateString(),
+      messages: [...messages]
+    };
+    
+    setSavedChats(prev => [newSavedChat, ...prev]);
+  };
   return <div className="flex-1 flex flex-col h-full">
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 pt-20 pb-24" onMouseUp={handleTextSelection}>
@@ -341,7 +434,24 @@ At this time, we are facing some issues and bugs in the app so please report the
               </div>
             </div>
           </div> : <>
-            {messages.map(message => <ChatMessage key={message.id} message={message} onLike={isLiked => handleLikeMessage(message.id, isLiked)} onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} onExport={() => setIsExportOpen(true)} />)}
+            {messages.map(message => (
+              <div key={message.id}>
+                {message.videos && message.videos.length > 0 && (
+                  <YouTubeVideoGrid 
+                    videos={message.videos} 
+                    onVideoClick={setSelectedVideo}
+                  />
+                )}
+                <ChatMessage 
+                  message={message} 
+                  onLike={isLiked => handleLikeMessage(message.id, isLiked)} 
+                  onDislike={isDisliked => handleDislikeMessage(message.id, isDisliked)} 
+                  onRegenerate={modelId => handleRegenerateMessage(message.id, modelId)} 
+                  onExport={() => setIsExportOpen(true)} 
+                  onSave={() => handleSaveChat(message.id)} 
+                />
+              </div>
+            ))}
             <div ref={messagesEndRef} />
           </>}
       </div>
@@ -361,5 +471,11 @@ At this time, we are facing some issues and bugs in the app so please report the
 
       {/* Export dialog */}
       <ExportDialog isOpen={isExportOpen} onOpenChange={setIsExportOpen} messages={messages} selectedModel={selectedModel} />
+      
+      {/* YouTube Video Player */}
+      <YouTubeVideoPlayer 
+        video={selectedVideo} 
+        onClose={() => setSelectedVideo(null)} 
+      />
     </div>;
 }

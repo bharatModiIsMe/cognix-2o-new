@@ -250,21 +250,21 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    // Use the proper images/generations endpoint like the working image editing
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    formData.append('model', imageModel.apiModel);
-    formData.append('width', '1024');
-    formData.append('height', '1024');
-    formData.append('num_inference_steps', '20');
-    formData.append('guidance_scale', '7.5');
-    
+    // Use JSON format like the working network requests show
     const response = await fetch(`${a4fBaseUrl}/images/generations`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${a4fApiKey}`,
+        'Content-Type': 'application/json',
       },
-      body: formData
+      body: JSON.stringify({
+        model: imageModel.apiModel,
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+        quality: "standard",
+        response_format: "url"
+      })
     });
 
     if (!response.ok) {
@@ -276,7 +276,7 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
     const result = await response.json();
     console.log('Image generation result:', result);
     
-    // Check for image URL in the response (same format as image editing)
+    // Check for image URL in the response
     if (result.data && result.data[0] && result.data[0].url) {
       console.log('Found generated image URL:', result.data[0].url);
       return result.data[0].url;

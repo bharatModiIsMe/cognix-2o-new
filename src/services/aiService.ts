@@ -1,5 +1,4 @@
 
-import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
 import { searchYouTubeVideos, shouldShowVideos } from './youtubeService';
 
@@ -450,7 +449,7 @@ Always provide well-structured, formatted responses that are easy to read and un
       stream: true,
     };
 
-    const response = await callBackendProxy('stream', requestBody);
+    const response = await callBackendProxy('text', requestBody);
 
     if (response[Symbol.asyncIterator]) {
       // Streaming response

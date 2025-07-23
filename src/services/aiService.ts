@@ -250,79 +250,21 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    // Method 1: Try the exact same approach as successful image editing but for generation
-    try {
-      const formData = new FormData();
-      formData.append('prompt', prompt);
-      formData.append('model', 'provider-3/flux-kontext-dev'); // Use the model that works for editing
-      formData.append('width', '1024');
-      formData.append('height', '1024');
-      formData.append('strength', '0.8');
-      formData.append('guidance_scale', '7.5');
-      
-      const response = await fetch(`${a4fBaseUrl}/images/generations`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${a4fApiKey}`,
-        },
-        body: formData
-      });
+    // Use the working image generation approach with provider-3/flux-kontext-dev
+    const response = await a4fClient.images.generate({
+      model: "provider-3/flux-kontext-dev",
+      prompt: prompt,
+      n: 1,
+      size: "1024x1024",
+      response_format: "url"
+    });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Image generation result (method 1):', result);
-        
-        if (result.data && result.data[0] && result.data[0].url) {
-          console.log('Found generated image URL:', result.data[0].url);
-          return result.data[0].url;
-        }
-      } else {
-        console.log('Method 1 failed, status:', response.status);
-      }
-    } catch (error) {
-      console.log('Method 1 failed:', error);
+    if (response.data && response.data[0] && response.data[0].url) {
+      console.log('Generated image URL:', response.data[0].url);
+      return response.data[0].url;
     }
 
-    // Method 2: Use chat completions with an image-capable model (like FLUX.1.1-pro you showed)
-    try {
-      console.log('Trying chat completions method...');
-      
-      const response = await a4fClient.chat.completions.create({
-        model: "provider-1/FLUX.1.1-pro", // The model you showed works
-        messages: [
-          {
-            role: 'user',
-            content: `Generate/create an image of: ${prompt}. Please provide the image URL or image data.`
-          }
-        ],
-        stream: false,
-      });
-
-      const content = response.choices[0]?.message?.content;
-      console.log('Chat completion response:', content);
-      
-      if (content) {
-        // Check for URL in response
-        const urlMatch = content.match(/https?:\/\/[^\s)"\]]+/);
-        if (urlMatch) {
-          console.log('Found image URL from chat:', urlMatch[0]);
-          return urlMatch[0];
-        }
-        
-        // Check for base64 image
-        if (content.includes('data:image')) {
-          const base64Match = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
-          if (base64Match) {
-            console.log('Found base64 image from chat');
-            return base64Match[0];
-          }
-        }
-      }
-    } catch (error) {
-      console.log('Chat completions method failed:', error);
-    }
-
-    throw new Error('All image generation methods failed');
+    throw new Error('No image URL returned from API');
     
   } catch (error) {
     console.error('Image generation error:', error);

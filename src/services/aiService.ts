@@ -292,36 +292,79 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    const response = await a4fClient.chat.completions.create({
-      model: imageModel.apiModel,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      stream: false,
+    // Create form data for image generation
+    const formData = new FormData();
+    formData.append('prompt', prompt);
+    formData.append('model', imageModel.apiModel);
+    formData.append('width', '1024');
+    formData.append('height', '1024');
+    formData.append('num_outputs', '1');
+    
+    // Use direct API call for image generation
+    const response = await fetch(`${a4fBaseUrl}/images/generations`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${a4fApiKey}`,
+      },
+      body: formData
     });
 
-    // For image generation, the response content should contain the image URL or data
-    const content = response.choices[0]?.message?.content;
-    if (content) {
-      // If the content contains a URL, return it
-      if (content.includes('http')) {
-        const urlMatch = content.match(/https?:\/\/[^\s]+/);
-        if (urlMatch) {
-          console.log('Found image URL:', urlMatch[0]);
-          return urlMatch[0];
+    if (!response.ok) {
+      // If the images/generations endpoint doesn't work, try the direct model approach
+      if (response.status === 404) {
+        console.log('Trying alternative image generation method...');
+        
+        // For some models, we might need to use a different approach
+        const jsonResponse = await fetch(`${a4fBaseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${a4fApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: imageModel.apiModel.replace('provider-1/', 'provider-3/').replace('provider-2/', 'provider-3/'),
+            messages: [{ role: 'user', content: prompt }],
+            stream: false,
+          })
+        });
+
+        if (jsonResponse.ok) {
+          const jsonResult = await jsonResponse.json();
+          const content = jsonResult.choices[0]?.message?.content;
+          
+          if (content) {
+            const urlMatch = content.match(/https?:\/\/[^\s)]+/);
+            if (urlMatch) {
+              console.log('Found image URL from alternative method:', urlMatch[0]);
+              return urlMatch[0];
+            }
+            
+            if (content.startsWith('data:image')) {
+              console.log('Found base64 image from alternative method');
+              return content;
+            }
+          }
         }
       }
-      // If it's base64 data, return it
-      if (content.startsWith('data:image')) {
-        console.log('Found base64 image');
-        return content;
-      }
+      
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    console.log('Unexpected response structure:', JSON.stringify(response, null, 2));
+    const result = await response.json();
+    
+    // Check for image URL in the response
+    if (result.data && result.data[0] && result.data[0].url) {
+      console.log('Found generated image URL:', result.data[0].url);
+      return result.data[0].url;
+    }
+    
+    // Check for direct URL in result
+    if (result.url) {
+      console.log('Found direct image URL:', result.url);
+      return result.url;
+    }
+
+    console.log('Unexpected response structure:', JSON.stringify(result, null, 2));
     throw new Error('No image data found in response');
     
   } catch (error) {

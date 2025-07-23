@@ -84,19 +84,12 @@ export function ChatInput({
     try {
       onSendMessage(content, images, selectedTools);
       
-      // Clear the form completely
+      // Clear the form
       setInput("");
-      // Clear images and revoke URLs to prevent memory leaks
-      imageUrls.forEach(url => URL.revokeObjectURL(url));
       setImages([]);
       setImageUrls([]);
       setSelectedTools([]);
       setIsToolMenuOpen(false);
-      
-      // Reset file input to allow same file upload again
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     } catch (error) {
       console.error('Error sending message:', error);
     }

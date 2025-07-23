@@ -47,7 +47,7 @@ export const AI_MODELS: AIModel[] = [
   {
     id: "deepseek-v3",
     name: "DeepSeek V3",
-    apiModel: "provider-6/deepseek-r1-uncensored",
+    apiModel: "provider-3/deepseek-v3-0324",
     description: "Advanced reasoning and coding capabilities",
     badge: "Reasoning"
   },
@@ -80,19 +80,19 @@ export const IMAGE_MODELS: AIModel[] = [
     name: "FLUX.1.1-pro",
     apiModel: "provider-1/FLUX.1.1-pro",
     description: "High-quality image generation",
-    badge: "Pro-Model"
+    badge: "Premium"
   },
   {
-    id: "FLUX.1-kontext-max",
-    name: "FLUX.1-kontext-max",
-    apiModel: "provider-6/FLUX.1-kontext-max",
+    id: "sana-1.5-flash",
+    name: "Sana-1.5-flash",
+    apiModel: "provider-6/sana-1.5-flash",
     description: "Fast image generation",
     badge: "Fast"
   },
   {
-    id: "FLUX.1-pro",
-    name: "FLUX.1-pro",
-    apiModel: "provider-6/FLUX.1-pro",
+    id: "sana-1.5",
+    name: "Sana-1.5",
+    apiModel: "provider-6/sana-1.5",
     description: "Balanced image generation",
     badge: "Balanced"
   },
@@ -156,9 +156,9 @@ export const IMAGE_MODELS: AIModel[] = [
 
 export const IMAGE_EDIT_MODELS: AIModel[] = [
   {
-    id: "flux-1-kontext-max",
-    name: "flux-1-kontext-max",
-    apiModel: "provider-6/black-forest-labs-flux-1-kontext-max",
+    id: "flux-kontext-dev",
+    name: "FLUX Kontext Dev",
+    apiModel: "provider-3/flux-kontext-dev",
     description: "Advanced image editing with context understanding",
     badge: "Edit"
   }
@@ -198,31 +198,6 @@ function needsWebSearch(query: string): boolean {
   ];
   
   return webSearchTriggers.some(trigger => trigger.test(query));
-}
-
-// Helper function to extract better search keywords for YouTube videos
-function extractVideoSearchKeywords(query: string): string {
-  // Remove common conversational words and extract key terms
-  const stopWords = ['how', 'can', 'you', 'please', 'show', 'me', 'tell', 'explain', 'what', 'is', 'are', 'the', 'a', 'an', 'and', 'or', 'but'];
-  const words = query.toLowerCase().split(/\s+/);
-  
-  // Keep important terms that indicate what to search for
-  const keywords = words.filter(word => 
-    word.length > 2 && 
-    !stopWords.includes(word) &&
-    !['tutorial', 'video', 'guide'].includes(word) // These will be added back
-  );
-  
-  // Add contextual terms for better results
-  const contextTerms = [];
-  if (query.toLowerCase().includes('how to') || query.toLowerCase().includes('tutorial')) {
-    contextTerms.push('tutorial', 'how to');
-  }
-  if (query.toLowerCase().includes('learn')) {
-    contextTerms.push('beginner guide');
-  }
-  
-  return [...keywords.slice(0, 3), ...contextTerms].join(' ');
 }
 
 // Helper function to convert File to base64
@@ -334,21 +309,14 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
   try {
     console.log('Editing image with flux-kontext-dev model, prompt:', prompt);
     
-    // Get original image dimensions for aspect ratio preservation
-    const originalDimensions = await getImageDimensions(imageFile);
-    
     // Convert image to base64
     const base64Image = await fileToBase64(imageFile);
     
-    // Create form data for image editing with enhanced parameters
+    // Create form data for image editing
     const formData = new FormData();
     formData.append('image', imageFile);
     formData.append('prompt', prompt);
     formData.append('model', 'provider-3/flux-kontext-dev');
-    formData.append('width', originalDimensions.width.toString());
-    formData.append('height', originalDimensions.height.toString());
-    formData.append('strength', '0.8'); // Higher strength for better quality
-    formData.append('guidance_scale', '7.5'); // Better guidance for quality
     
     // Use direct API call for image editing
     const response = await fetch(`${a4fBaseUrl}/images/edits`, {
@@ -378,10 +346,7 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
         {
           role: 'user',
           content: [
-            { 
-              type: "text" as const, 
-              text: `${prompt}. Please maintain the original aspect ratio and dimensions (${originalDimensions.width}x${originalDimensions.height}). Ensure high quality output.` 
-            },
+            { type: "text" as const, text: prompt },
             {
               type: "image_url" as const,
               image_url: { url: base64Image }
@@ -417,18 +382,6 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
   }
 }
 
-// Helper function to get image dimensions
-function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-
 export async function* generateAIResponseStream(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   modelId: string,
@@ -450,9 +403,9 @@ export async function* generateAIResponseStream(
       // Check if query should show YouTube videos and get relevant videos
       if (shouldShowVideos(lastUserMessage.content)) {
         try {
-          // Extract more specific keywords for better video search
-          const searchQuery = extractVideoSearchKeywords(lastUserMessage.content);
-          youtubeVideos = await searchYouTubeVideos(searchQuery, 3);
+          // Use more specific keywords from the query for better video search
+          const searchQuery = lastUserMessage.content;
+          youtubeVideos = await searchYouTubeVideos(searchQuery, 5);
           console.log('Found YouTube videos:', youtubeVideos.length);
         } catch (error) {
           console.error('YouTube search failed:', error);

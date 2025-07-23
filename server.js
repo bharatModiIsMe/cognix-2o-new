@@ -36,6 +36,26 @@ app.post('/api/a4f/text', (req, res) => proxyA4F(req, res, 'chat/completions'));
 app.post('/api/a4f/image', (req, res) => proxyA4F(req, res, 'images/generations'));
 app.post('/api/a4f/edit', (req, res) => proxyA4F(req, res, 'images/edits'));
 
+// Add A4F stream proxy endpoint (non-streaming version)
+app.post('/api/a4f/stream', async (req, res) => {
+  try {
+    const A4F_API_KEY = process.env.A4F_API_KEY;
+    const A4F_API_URL = process.env.A4F_API_URL;
+    const response = await fetch(`${A4F_API_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${A4F_API_KEY}`,
+      },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'A4F stream proxy error', details: err.message });
+  }
+});
+
 // Add Google Search proxy endpoint
 app.post('/api/google/search', async (req, res) => {
   try {

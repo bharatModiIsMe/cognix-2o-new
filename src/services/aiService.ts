@@ -627,3 +627,4 @@ Always provide well-structured, formatted responses that are easy to read and un
     console.error('AI API Stream Error:', error);
     yield { content: "I'm experiencing some technical difficulties right now. Please try again in a moment.", videos: [] };
   }
+}

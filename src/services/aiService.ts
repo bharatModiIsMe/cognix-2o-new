@@ -83,16 +83,16 @@ export const IMAGE_MODELS: AIModel[] = [
     badge: "Premium"
   },
   {
-    id: "sana-1.5-flash",
-    name: "Sana-1.5-flash",
-    apiModel: "provider-6/sana-1.5-flash",
+    id: "flux-1-dev",                                   
+    name: "FLUX.1-dev",
+    apiModel: "provider-2/FLUX.1-dev",
     description: "Fast image generation",
     badge: "Fast"
   },
   {
-    id: "sana-1.5",
-    name: "Sana-1.5",
-    apiModel: "provider-6/sana-1.5",
+    id: "flux-1-kontext-max",
+    name: "Flux.1-kontext-max",
+    apiModel: "provider-6/FLUX.1-kontext-max",
     description: "Balanced image generation",
     badge: "Balanced"
   },
@@ -143,7 +143,7 @@ export const IMAGE_MODELS: AIModel[] = [
     name: "Imagen 3.0 Gen 002",
     apiModel: "provider-3/imagen-3.0-generate-002",
     description: "Imagen 3.0 generation model",
-    badge: "Gen"
+    badge: "Powerfull"
   },
   {
     id: "imagen-4.0-generate-preview",
@@ -156,9 +156,9 @@ export const IMAGE_MODELS: AIModel[] = [
 
 export const IMAGE_EDIT_MODELS: AIModel[] = [
   {
-    id: "flux-kontext-dev",
+    id: "flux-1-kontext-max",
     name: "FLUX Kontext Dev",
-    apiModel: "provider-3/flux-kontext-dev",
+    apiModel: "provider-6/black-forest-labs-flux-1-kontext-max",
     description: "Advanced image editing with context understanding",
     badge: "Edit"
   }

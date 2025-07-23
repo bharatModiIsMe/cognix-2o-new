@@ -352,7 +352,7 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
     const formData = new FormData();
     formData.append('image', imageFile);
     formData.append('prompt', prompt);
-    formData.append('model', 'provider-3/flux-kontext-dev');
+    formData.append('model', 'provider-6/black-forest-labs-flux-1-kontext-max');
     formData.append('width', originalDimensions.width.toString());
     formData.append('height', originalDimensions.height.toString());
     formData.append('strength', '0.8'); // Higher strength for better quality
@@ -381,7 +381,7 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
     
     // If no URL found, try using the flux-kontext-dev model with chat API
     const chatResponse = await a4fClient.chat.completions.create({
-      model: "provider-3/flux-kontext-dev",
+      model: "provider-6/black-forest-labs-flux-1-kontext-max",
       messages: [
         {
           role: 'user',

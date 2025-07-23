@@ -292,80 +292,98 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    // Create form data for image generation
-    const formData = new FormData();
-    formData.append('prompt', prompt);
-    formData.append('model', imageModel.apiModel);
-    formData.append('width', '1024');
-    formData.append('height', '1024');
-    formData.append('num_outputs', '1');
+    // Try different approaches based on the model
     
-    // Use direct API call for image generation
-    const response = await fetch(`${a4fBaseUrl}/images/generations`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${a4fApiKey}`,
-      },
-      body: formData
-    });
+    // Method 1: Direct images/generations endpoint
+    try {
+      const formData = new FormData();
+      formData.append('prompt', prompt);
+      formData.append('model', imageModel.apiModel);
+      formData.append('n', '1');
+      formData.append('size', '1024x1024');
+      
+      const response = await fetch(`${a4fBaseUrl}/images/generations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${a4fApiKey}`,
+        },
+        body: formData
+      });
 
-    if (!response.ok) {
-      // If the images/generations endpoint doesn't work, try the direct model approach
-      if (response.status === 404) {
-        console.log('Trying alternative image generation method...');
-        
-        // For some models, we might need to use a different approach
-        const jsonResponse = await fetch(`${a4fBaseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${a4fApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: imageModel.apiModel.replace('provider-1/', 'provider-3/').replace('provider-2/', 'provider-3/'),
-            messages: [{ role: 'user', content: prompt }],
-            stream: false,
-          })
-        });
-
-        if (jsonResponse.ok) {
-          const jsonResult = await jsonResponse.json();
-          const content = jsonResult.choices[0]?.message?.content;
-          
-          if (content) {
-            const urlMatch = content.match(/https?:\/\/[^\s)]+/);
-            if (urlMatch) {
-              console.log('Found image URL from alternative method:', urlMatch[0]);
-              return urlMatch[0];
-            }
-            
-            if (content.startsWith('data:image')) {
-              console.log('Found base64 image from alternative method');
-              return content;
-            }
-          }
+      if (response.ok) {
+        const result = await response.json();
+        if (result.data && result.data[0] && result.data[0].url) {
+          console.log('Found generated image URL (method 1):', result.data[0].url);
+          return result.data[0].url;
         }
       }
+    } catch (error) {
+      console.log('Method 1 failed, trying method 2...');
+    }
+
+    // Method 2: Try with simplified model name (remove provider prefix)
+    try {
+      const simplifiedModel = imageModel.apiModel.replace(/^provider-\d+\//, '');
       
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const response = await fetch(`${a4fBaseUrl}/images/generations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${a4fApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: simplifiedModel,
+          prompt: prompt,
+          n: 1,
+          size: "1024x1024",
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.data && result.data[0] && result.data[0].url) {
+          console.log('Found generated image URL (method 2):', result.data[0].url);
+          return result.data[0].url;
+        }
+      }
+    } catch (error) {
+      console.log('Method 2 failed, trying method 3...');
     }
 
-    const result = await response.json();
-    
-    // Check for image URL in the response
-    if (result.data && result.data[0] && result.data[0].url) {
-      console.log('Found generated image URL:', result.data[0].url);
-      return result.data[0].url;
-    }
-    
-    // Check for direct URL in result
-    if (result.url) {
-      console.log('Found direct image URL:', result.url);
-      return result.url;
+    // Method 3: Use a known working model through chat completions (as a last resort)
+    try {
+      // Use a model that might work with chat completions for image generation
+      const response = await a4fClient.chat.completions.create({
+        model: "provider-6/FLUX.1-kontext-max", // This model might work
+        messages: [
+          {
+            role: 'user',
+            content: `Generate an image: ${prompt}`
+          }
+        ],
+        stream: false,
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (content) {
+        // Check for URL in response
+        const urlMatch = content.match(/https?:\/\/[^\s)]+/);
+        if (urlMatch) {
+          console.log('Found image URL (method 3):', urlMatch[0]);
+          return urlMatch[0];
+        }
+        
+        // Check for base64 image
+        if (content.startsWith('data:image')) {
+          console.log('Found base64 image (method 3)');
+          return content;
+        }
+      }
+    } catch (error) {
+      console.log('Method 3 failed...');
     }
 
-    console.log('Unexpected response structure:', JSON.stringify(result, null, 2));
-    throw new Error('No image data found in response');
+    throw new Error('All image generation methods failed');
     
   } catch (error) {
     console.error('Image generation error:', error);

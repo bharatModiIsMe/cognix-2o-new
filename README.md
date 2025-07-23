@@ -2,7 +2,7 @@
 
 **Cognix AI** is a revolutionary AI-powered chat platform that brings together the smartest models, stunning image generation tools, and natural voice interaction — all in one place. Whether you're a creator, developer, or just curious, Cognix makes exploring the power of AI seamless and intuitive.
 
-![cognix-waitlist](https://cognix-ai-waitlist.vercel.app)
+[Join Cognix Waitlist](https://cognix-ai-waitlist.vercel.app)
 
 ---
 

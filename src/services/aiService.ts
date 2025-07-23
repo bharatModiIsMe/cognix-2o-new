@@ -287,119 +287,54 @@ export async function generateAIResponse(
 }
 
 export async function generateImage(prompt: string, modelId: string): Promise<string> {
-  console.log('=== IMAGE GENERATION DEBUG START ===');
-  console.log('Requested model ID:', modelId);
-  
   const imageModel = IMAGE_MODELS.find(m => m.id === modelId) || IMAGE_MODELS[0];
-  console.log('Selected image model:', imageModel);
   
   try {
-    console.log('Attempting image generation with model:', imageModel.apiModel, 'prompt:', prompt);
+    console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    // For A4F API, let's try using models that are known to work with chat completions for image generation
-    // We'll use specific models that can handle image generation through chat interface
+    // Use the proper images/generations endpoint like the working image editing
+    const formData = new FormData();
+    formData.append('prompt', prompt);
+    formData.append('model', imageModel.apiModel);
+    formData.append('width', '1024');
+    formData.append('height', '1024');
+    formData.append('num_inference_steps', '20');
+    formData.append('guidance_scale', '7.5');
     
-    const workingImageModels = [
-      "provider-6/FLUX.1-kontext-max",
-      "provider-6/FLUX.1-pro", 
-      "provider-3/FLUX.1-dev",
-      "provider-6/gpt-4o" // This can sometimes generate images
-    ];
-    
-    for (const model of workingImageModels) {
-      try {
-        console.log(`Trying image generation with model: ${model}`);
-        
-        const response = await a4fClient.chat.completions.create({
-          model: model,
-          messages: [
-            {
-              role: 'user',
-              content: `Create/generate an image of: ${prompt}. Return the image URL or base64 data.`
-            }
-          ],
-          stream: false,
-        });
+    const response = await fetch(`${a4fBaseUrl}/images/generations`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${a4fApiKey}`,
+      },
+      body: formData
+    });
 
-        console.log(`Response from ${model}:`, response);
-        
-        const content = response.choices[0]?.message?.content;
-        if (content) {
-          console.log('Response content:', content);
-          
-          // Check for URL in response
-          const urlMatch = content.match(/https?:\/\/[^\s)"\]]+/);
-          if (urlMatch) {
-            console.log('Found image URL:', urlMatch[0]);
-            return urlMatch[0];
-          }
-          
-          // Check for base64 image
-          if (content.includes('data:image') || content.includes('base64')) {
-            const base64Match = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
-            if (base64Match) {
-              console.log('Found base64 image');
-              return base64Match[0];
-            }
-          }
-          
-          // If the model says it can't generate images, try next model
-          if (content.toLowerCase().includes("can't generate") || 
-              content.toLowerCase().includes("cannot generate") ||
-              content.toLowerCase().includes("unable to generate")) {
-            console.log(`Model ${model} cannot generate images, trying next...`);
-            continue;
-          }
-        }
-        
-      } catch (error) {
-        console.error(`Error with model ${model}:`, error);
-        continue;
-      }
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Image generation API error:', response.status, errorText);
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    // If all models fail, try a direct images endpoint approach
-    console.log('All chat-based models failed, trying direct image endpoint...');
+    const result = await response.json();
+    console.log('Image generation result:', result);
     
-    try {
-      const response = await fetch(`${a4fBaseUrl}/images/generations`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${a4fApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: "dall-e-3", // Try a standard model name
-          prompt: prompt,
-          n: 1,
-          size: "1024x1024",
-        })
-      });
-
-      console.log('Direct endpoint response status:', response.status);
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Direct endpoint result:', result);
-        
-        if (result.data && result.data[0] && result.data[0].url) {
-          console.log('Found image URL from direct endpoint:', result.data[0].url);
-          return result.data[0].url;
-        }
-      } else {
-        const errorText = await response.text();
-        console.log('Direct endpoint error:', errorText);
-      }
-    } catch (error) {
-      console.error('Direct endpoint failed:', error);
+    // Check for image URL in the response (same format as image editing)
+    if (result.data && result.data[0] && result.data[0].url) {
+      console.log('Found generated image URL:', result.data[0].url);
+      return result.data[0].url;
+    }
+    
+    // Check for direct URL in result
+    if (result.url) {
+      console.log('Found direct image URL:', result.url);
+      return result.url;
     }
 
-    console.log('=== IMAGE GENERATION DEBUG END ===');
-    throw new Error('All image generation methods failed. The API may not support image generation with the available models.');
+    console.log('Unexpected response structure:', JSON.stringify(result, null, 2));
+    throw new Error('No image data found in response');
     
   } catch (error) {
     console.error('Image generation error:', error);
-    console.log('=== IMAGE GENERATION DEBUG END ===');
     throw new Error(`Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

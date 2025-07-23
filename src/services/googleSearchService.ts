@@ -14,25 +14,16 @@ export interface GoogleSearchResponse {
   }>;
 }
 
-const GOOGLE_API_KEY = "AIzaSyBSv1EpREIhK5ETdcY_Y2-55zTsWuopazU";
-const GOOGLE_CSE_ID = "62765f47bd1a64d7c";
-
 export async function googleSearch(query: string): Promise<SearchResult[]> {
   try {
-    const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CSE_ID}&q=${encodeURIComponent(query)}&num=5`;
-    
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`Google Search API error: ${response.status}`);
-    }
-    
+    const response = await fetch('/api/google/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    if (!response.ok) throw new Error(`Google Search API error: ${response.status}`);
     const data: GoogleSearchResponse = await response.json();
-    
-    if (!data.items || data.items.length === 0) {
-      return [];
-    }
-    
+    if (!data.items || data.items.length === 0) return [];
     return data.items.slice(0, 5).map(item => ({
       title: item.title,
       snippet: item.snippet,

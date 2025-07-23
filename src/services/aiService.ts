@@ -3,14 +3,18 @@ import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
 import { searchYouTubeVideos, shouldShowVideos } from './youtubeService';
 
-const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
-const a4fBaseUrl = 'https://api.a4f.co/v1';
-
-const a4fClient = new OpenAI({
-  apiKey: a4fApiKey,
-  baseURL: a4fBaseUrl,
-  dangerouslyAllowBrowser: true
-});
+// Helper to call backend proxy
+async function callBackendProxy(endpoint: string, body: any, isFormData = false) {
+  const url = `/api/a4f/${endpoint}`;
+  const options: RequestInit = {
+    method: 'POST',
+    headers: isFormData ? undefined : { 'Content-Type': 'application/json' },
+    body: isFormData ? body : JSON.stringify(body),
+  };
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(`Proxy error: ${response.status}`);
+  return response.json();
+}
 
 // Store user context for memory
 let userContext: { name?: string; preferences?: Record<string, any> } = {};
@@ -241,7 +245,6 @@ export async function generateAIResponse(
   images?: File[]
 ): Promise<string> {
   const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
-
   try {
     // Convert images to base64 if provided
     const imageUrls: string[] = [];
@@ -251,35 +254,20 @@ export async function generateAIResponse(
         imageUrls.push(base64);
       }
     }
-
-    // Prepare messages with images for all models
     const enhancedMessages = messages.map((msg, index) => {
       if (msg.role === 'user' && index === messages.length - 1 && imageUrls.length > 0) {
-        // Add images to the last user message for all models
         return {
           role: 'user' as const,
           content: [
             { type: "text" as const, text: msg.content },
-            ...imageUrls.map(url => ({
-              type: "image_url" as const,
-              image_url: { url }
-            }))
+            ...imageUrls.map(url => ({ type: "image_url" as const, image_url: { url } }))
           ]
         };
       }
-      return {
-        role: msg.role,
-        content: msg.content
-      };
+      return { role: msg.role, content: msg.content };
     });
-
-    const response = await a4fClient.chat.completions.create({
-      model: model.apiModel,
-      messages: enhancedMessages,
-      stream: false,
-    });
-
-    return response.choices[0]?.message?.content || "I apologize, but I couldn't generate a response at this time.";
+    const data = await callBackendProxy('text', { model: model.apiModel, messages: enhancedMessages });
+    return data.choices?.[0]?.message?.content || "I apologize, but I couldn't generate a response at this time.";
   } catch (error) {
     console.error('AI API Error:', error);
     return "I'm experiencing some technical difficulties right now. Please try again in a moment.";
@@ -288,50 +276,18 @@ export async function generateAIResponse(
 
 export async function generateImage(prompt: string, modelId: string): Promise<string> {
   const imageModel = IMAGE_MODELS.find(m => m.id === modelId) || IMAGE_MODELS[0];
-  
   try {
-    console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
-    
-    // Use the A4F images endpoint instead of chat completions
-    const response = await fetch(`${a4fBaseUrl}/images/generations`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${a4fApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: imageModel.apiModel,
-        prompt: prompt,
-        n: 1,
-        size: "1024x1024",
-        quality: "standard",
-        response_format: "url"
-      }),
+    const data = await callBackendProxy('image', {
+      model: imageModel.apiModel,
+      prompt,
+      n: 1,
+      size: "1024x1024",
+      quality: "standard",
+      response_format: "url"
     });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log('Image generation response:', data);
-
-    // Check for image URL in response
-    if (data.data && data.data[0] && data.data[0].url) {
-      console.log('Found image URL:', data.data[0].url);
-      return data.data[0].url;
-    }
-
-    // Check for b64_json format
-    if (data.data && data.data[0] && data.data[0].b64_json) {
-      console.log('Found base64 image');
-      return `data:image/png;base64,${data.data[0].b64_json}`;
-    }
-
-    // If no proper image data found, log the response structure
-    console.log('Unexpected response structure:', JSON.stringify(data, null, 2));
+    if (data.data && data.data[0] && data.data[0].url) return data.data[0].url;
+    if (data.data && data.data[0] && data.data[0].b64_json) return `data:image/png;base64,${data.data[0].b64_json}`;
     throw new Error('No image data found in response');
-    
   } catch (error) {
     console.error('Image generation error:', error);
     throw new Error(`Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -340,85 +296,18 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
 
 export async function editImage(imageFile: File, prompt: string): Promise<string> {
   try {
-    console.log('Editing image with black-forest-labs-flux-1-kontext-max model, prompt:', prompt);
-    
-    // Get original image dimensions for aspect ratio preservation
     const originalDimensions = await getImageDimensions(imageFile);
-    
-    // Convert image to base64
-    const base64Image = await fileToBase64(imageFile);
-    
-    // Create form data for image editing with enhanced parameters
     const formData = new FormData();
     formData.append('image', imageFile);
     formData.append('prompt', prompt);
     formData.append('model', 'provider-6/black-forest-labs-flux-1-kontext-max');
     formData.append('width', originalDimensions.width.toString());
     formData.append('height', originalDimensions.height.toString());
-    formData.append('strength', '0.8'); // Higher strength for better quality
-    formData.append('guidance_scale', '7.5'); // Better guidance for quality
-    
-    // Use direct API call for image editing
-    const response = await fetch(`${a4fBaseUrl}/images/edits`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${a4fApiKey}`,
-      },
-      body: formData
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    
-    // Check for image URL in the response
-    if (result.data && result.data[0] && result.data[0].url) {
-      console.log('Found edited image URL:', result.data[0].url);
-      return result.data[0].url;
-    }
-    
-    // If no URL found, try using the black-forest-labs-flux-1-kontext-max model with chat API
-    const chatResponse = await a4fClient.chat.completions.create({
-      model: "provider-6/black-forest-labs-flux-1-kontext-max",
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { 
-              type: "text" as const, 
-              text: `${prompt}. Please maintain the original aspect ratio and dimensions (${originalDimensions.width}x${originalDimensions.height}). Ensure high quality output.` 
-            },
-            {
-              type: "image_url" as const,
-              image_url: { url: base64Image }
-            }
-          ]
-        }
-      ],
-      stream: false,
-    });
-
-    const content = chatResponse.choices[0]?.message?.content;
-    if (content) {
-      // Check for image URL in response
-      const urlMatch = content.match(/https?:\/\/[^\s)]+/);
-      if (urlMatch) {
-        console.log('Found edited image URL from chat API:', urlMatch[0]);
-        return urlMatch[0];
-      }
-      
-      // Check for base64 image
-      if (content.startsWith('data:image')) {
-        console.log('Found edited base64 image');
-        return content;
-      }
-    }
-
-    console.log('No image data found in response, returning original image');
+    formData.append('strength', '0.8');
+    formData.append('guidance_scale', '7.5');
+    const data = await callBackendProxy('edit', formData, true);
+    if (data.data && data.data[0] && data.data[0].url) return data.data[0].url;
     return URL.createObjectURL(imageFile);
-    
   } catch (error) {
     console.error('Image editing error:', error);
     throw new Error(`Failed to edit image: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -561,7 +450,7 @@ Always provide well-structured, formatted responses that are easy to read and un
       stream: true,
     };
 
-    const response = await a4fClient.chat.completions.create(requestBody) as any;
+    const response = await callBackendProxy('stream', requestBody);
 
     if (response[Symbol.asyncIterator]) {
       // Streaming response

@@ -32,7 +32,7 @@ export function Layout() {
         {/* Mobile Overlay */}
         {isMobile && sidebarOpen && <div className="fixed inset-0 bg-black/50 z-30" onClick={() => setSidebarOpen(false)} />}
         
-        <main className={`flex-1 flex flex-col ${isMobile ? 'ml-0' : 'ml-16'}`}>
+        <main className={`flex-1 flex flex-col ${isMobile ? 'ml-0' : 'ml-64'}`}>
           {/* Header */}
           
 

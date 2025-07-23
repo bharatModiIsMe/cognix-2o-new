@@ -10,8 +10,8 @@ export async function generateVideo(prompt: string): Promise<string> {
   try {
     console.log('Generating video with prompt:', prompt);
     
-    const response = await fetch(`${a4fBaseUrl}/video/generation`, {
-      model: "provider-6/wan-2.1",
+    const completion = await client.chat.completions.create({
+      model: "wan-2.1",
       messages: [
         {
           role: "user",
@@ -22,7 +22,7 @@ export async function generateVideo(prompt: string): Promise<string> {
       temperature: 0.7,
     });
 
-    const content = video/generation`.choices[0]?.message?.content;
+    const content = completion.choices[0]?.message?.content;
     if (content) {
       // Check for video URL in response
       const urlMatch = content.match(/https?:\/\/[^\s]+\.(mp4|mov|avi|webm|mkv)/i);

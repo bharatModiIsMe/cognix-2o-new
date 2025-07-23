@@ -3,14 +3,16 @@ import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
 import { searchYouTubeVideos, shouldShowVideos } from './youtubeService';
 
-const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
-const a4fBaseUrl = 'https://api.a4f.co/v1';
+// Remove direct API key and base URL definitions
+// const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
+// const a4fBaseUrl = 'https://api.a4f.co/v1';
 
-const a4fClient = new OpenAI({
-  apiKey: a4fApiKey,
-  baseURL: a4fBaseUrl,
-  dangerouslyAllowBrowser: true
-});
+// Remove direct OpenAI client initialization
+// const a4fClient = new OpenAI({
+//   apiKey: a4fApiKey,
+//   baseURL: a4fBaseUrl,
+//   dangerouslyAllowBrowser: true
+// });
 
 // Store user context for memory
 let userContext: { name?: string; preferences?: Record<string, any> } = {};
@@ -273,13 +275,24 @@ export async function generateAIResponse(
       };
     });
 
-    const response = await a4fClient.chat.completions.create({
-      model: model.apiModel,
-      messages: enhancedMessages,
-      stream: false,
+    // Use fetch to call the local backend proxy for chat completions
+    const response = await fetch('/api/a4f/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model.apiModel,
+        messages: enhancedMessages,
+      }),
     });
 
-    return response.choices[0]?.message?.content || "I apologize, but I couldn't generate a response at this time.";
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0]?.message?.content || "I apologize, but I couldn't generate a response at this time.";
   } catch (error) {
     console.error('AI API Error:', error);
     return "I'm experiencing some technical difficulties right now. Please try again in a moment.";
@@ -292,11 +305,10 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    // Use the A4F images endpoint instead of chat completions
-    const response = await fetch(`${a4fBaseUrl}/images/generations`, {
+    // Use fetch to call the local backend proxy for image generation
+    const response = await fetch('/api/a4f/generate', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${a4fApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -358,12 +370,9 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
     formData.append('strength', '0.8'); // Higher strength for better quality
     formData.append('guidance_scale', '7.5'); // Better guidance for quality
     
-    // Use direct API call for image editing
-    const response = await fetch(`${a4fBaseUrl}/images/edits`, {
+    // Use fetch to call the local backend proxy for image editing
+    const response = await fetch('/api/a4f/edit', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${a4fApiKey}`,
-      },
       body: formData
     });
 
@@ -380,27 +389,33 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
     }
     
     // If no URL found, try using the black-forest-labs-flux-1-kontext-max model with chat API
-    const chatResponse = await a4fClient.chat.completions.create({
-      model: "provider-6/black-forest-labs-flux-1-kontext-max",
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { 
-              type: "text" as const, 
-              text: `${prompt}. Please maintain the original aspect ratio and dimensions (${originalDimensions.width}x${originalDimensions.height}). Ensure high quality output.` 
-            },
-            {
-              type: "image_url" as const,
-              image_url: { url: base64Image }
-            }
-          ]
-        }
-      ],
-      stream: false,
+    // This part will also be routed through the proxy
+    const chatResponse = await fetch('/api/a4f/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: "provider-6/black-forest-labs-flux-1-kontext-max",
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { 
+                type: "text" as const, 
+                text: `${prompt}. Please maintain the original aspect ratio and dimensions (${originalDimensions.width}x${originalDimensions.height}). Ensure high quality output.` 
+              },
+              {
+                type: "image_url" as const,
+                image_url: { url: base64Image }
+              }
+            ]
+          }
+        ],
+      }),
     });
 
-    const content = chatResponse.choices[0]?.message?.content;
+    const content = (await chatResponse.json()).choices[0]?.message?.content;
     if (content) {
       // Check for image URL in response
       const urlMatch = content.match(/https?:\/\/[^\s)]+/);
@@ -561,25 +576,54 @@ Always provide well-structured, formatted responses that are easy to read and un
       stream: true,
     };
 
-    const response = await a4fClient.chat.completions.create(requestBody) as any;
+    // Use fetch to call the local backend proxy for streaming chat completions
+    const response = await fetch('/api/a4f/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
 
-    if (response[Symbol.asyncIterator]) {
-      // Streaming response
-      for await (const chunk of response) {
-        const content = chunk.choices[0]?.delta?.content;
-        if (content) {
-          yield { content, videos: youtubeVideos };
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    // Read the stream from the proxy
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader!.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process chunks as they arrive
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const jsonString = line.substring(6);
+          if (jsonString === '[DONE]') {
+            yield { content: '', videos: youtubeVideos }; // Signal end of stream
+            return;
+          }
+          try {
+            const chunk = JSON.parse(jsonString);
+            const content = chunk.choices[0]?.delta?.content;
+            if (content) {
+              yield { content, videos: youtubeVideos };
+            }
+          } catch (e) {
+            console.error('Error parsing JSON chunk:', e);
+          }
         }
       }
-    } else {
-      // Non-streaming response
-      const content = response.choices[0]?.message?.content;
-      if (content) {
-        yield { content, videos: youtubeVideos };
-      }
     }
+
   } catch (error) {
     console.error('AI API Stream Error:', error);
     yield { content: "I'm experiencing some technical difficulties right now. Please try again in a moment.", videos: [] };
   }
-}

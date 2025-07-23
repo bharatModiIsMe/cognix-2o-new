@@ -41,7 +41,7 @@ export const AI_MODELS: AIModel[] = [
     id: "cognix-2o-web",
     name: "Cognix-2o Web",
     apiModel: "provider-6/gpt-4o-mini-search-preview",
-    description: "Web-enabled AI with real-time search capabilities",
+    description: "GPT-4.5 enhanced model by Cognix",
     badge: "Web"
   },
   {

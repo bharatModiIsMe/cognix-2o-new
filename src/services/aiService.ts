@@ -245,23 +245,37 @@ export async function generateAIResponse(
 }
 
 export async function generateImage(prompt: string, modelId: string): Promise<string> {
-  const imageModel = IMAGE_MODELS.find(m => m.id === modelId) || IMAGE_MODELS[0];
-  
   try {
-    console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
+    console.log('Generating image with direct API call, prompt:', prompt);
     
-    // Use the working image generation approach with provider-3/flux-kontext-dev
-    const response = await a4fClient.images.generate({
-      model: "provider-3/flux-kontext-dev",
-      prompt: prompt,
-      n: 1,
-      size: "1024x1024",
-      response_format: "url"
+    // Use the exact same successful approach as image editing
+    const formData = new FormData();
+    formData.append('prompt', prompt);
+    formData.append('model', 'provider-3/flux-kontext-dev');
+    formData.append('width', '1024');
+    formData.append('height', '1024');
+    formData.append('guidance_scale', '7.5');
+    
+    const response = await fetch(`${a4fBaseUrl}/images/generations`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${a4fApiKey}`,
+      },
+      body: formData
     });
 
-    if (response.data && response.data[0] && response.data[0].url) {
-      console.log('Generated image URL:', response.data[0].url);
-      return response.data[0].url;
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API Error:', response.status, errorText);
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('Image generation result:', result);
+    
+    if (result.data && result.data[0] && result.data[0].url) {
+      console.log('Found generated image URL:', result.data[0].url);
+      return result.data[0].url;
     }
 
     throw new Error('No image URL returned from API');

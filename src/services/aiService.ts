@@ -41,7 +41,7 @@ export const AI_MODELS: AIModel[] = [
     id: "cognix-2o-web",
     name: "Cognix-2o Web",
     apiModel: "provider-6/gpt-4o-mini-search-preview",
-    description: "GPT-4.5 enhanced model by Cognix",
+    description: "Web-enabled AI with real-time search capabilities",
     badge: "Web"
   },
   {
@@ -83,16 +83,16 @@ export const IMAGE_MODELS: AIModel[] = [
     badge: "Premium"
   },
   {
-    id: "flux-1-dev",                                   
-    name: "FLUX.1-dev",
-    apiModel: "provider-2/FLUX.1-dev",
+    id: "sana-1.5-flash",
+    name: "Sana-1.5-flash",
+    apiModel: "provider-6/sana-1.5-flash",
     description: "Fast image generation",
     badge: "Fast"
   },
   {
-    id: "flux-1-kontext-max",
-    name: "Flux.1-kontext-max",
-    apiModel: "provider-6/FLUX.1-kontext-max",
+    id: "sana-1.5",
+    name: "Sana-1.5",
+    apiModel: "provider-6/sana-1.5",
     description: "Balanced image generation",
     badge: "Balanced"
   },
@@ -143,7 +143,7 @@ export const IMAGE_MODELS: AIModel[] = [
     name: "Imagen 3.0 Gen 002",
     apiModel: "provider-3/imagen-3.0-generate-002",
     description: "Imagen 3.0 generation model",
-    badge: "Powerfull"
+    badge: "Gen"
   },
   {
     id: "imagen-4.0-generate-preview",
@@ -156,9 +156,9 @@ export const IMAGE_MODELS: AIModel[] = [
 
 export const IMAGE_EDIT_MODELS: AIModel[] = [
   {
-    id: "flux-1-kontext-max",
+    id: "flux-kontext-dev",
     name: "FLUX Kontext Dev",
-    apiModel: "provider-6/black-forest-labs-flux-1-kontext-max",
+    apiModel: "provider-3/flux-kontext-dev",
     description: "Advanced image editing with context understanding",
     badge: "Edit"
   }

@@ -1,27 +1,47 @@
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "https://api.a4f.co/v1",
+  apiKey: "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40",
+  dangerouslyAllowBrowser: true
+});
+
 export async function generateVideo(prompt: string): Promise<string> {
   try {
-    const response = await fetch('/api/a4f/video', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'wan-2.1',
-        messages: [
-          { role: 'user', content: `Generate a video: ${prompt}` },
-        ],
-        max_tokens: 1000,
-        temperature: 0.7,
-      }),
+    console.log('Generating video with prompt:', prompt);
+    
+    const response = await fetch(`${a4fBaseUrl}/video/generation`, {
+      model: "wan-2.1",
+      messages: [
+        {
+          role: "user",
+          content: `Generate a video: ${prompt}`,
+        },
+      ],
+      max_tokens: 1000,
+      temperature: 0.7,
     });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+
+    const content = completion.choices[0]?.message?.content;
     if (content) {
+      // Check for video URL in response
       const urlMatch = content.match(/https?:\/\/[^\s]+\.(mp4|mov|avi|webm|mkv)/i);
-      if (urlMatch) return urlMatch[0];
+      if (urlMatch) {
+        console.log('Found video URL:', urlMatch[0]);
+        return urlMatch[0];
+      }
+      
+      // If the content contains any URL, return it
       const anyUrlMatch = content.match(/https?:\/\/[^\s]+/);
-      if (anyUrlMatch) return anyUrlMatch[0];
+      if (anyUrlMatch) {
+        console.log('Found URL:', anyUrlMatch[0]);
+        return anyUrlMatch[0];
+      }
     }
+
+    console.log('Video generation response:', content);
     throw new Error('No video URL found in response');
+    
   } catch (error) {
     console.error('Video generation error:', error);
     throw new Error(`Failed to generate video: ${error instanceof Error ? error.message : 'Unknown error'}`);

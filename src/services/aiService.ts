@@ -586,6 +586,88 @@ Always provide well-structured, formatted responses that are easy to read and un
   }
 }
 
+export async function getAICompletion(messages: Message[], model: AIModel, webSearchResults?: SearchResult[], youtubeVideos?: any[]) {
+  try {
+    const enhancedMessages = messages.map(msg => {
+      if (msg.role === 'user' && webSearchResults && webSearchResults.length > 0) {
+        return {
+          role: msg.role,
+          content: msg.content + "\n\n" + formatSearchResults(webSearchResults)
+        };
+      }
+      return {
+        role: msg.role,
+        content: msg.content
+      };
+    });
+
+    // Replace the direct a4fClient call with a fetch request to your API route
+    const response = await fetch('/api/ai', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model.apiModel,
+        messages: enhancedMessages,
+        stream: false, // Set to true if you want to handle streaming responses
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to get AI completion');
+    }
+
+    const data = await response.json();
+    return data.choices[0]?.message?.content || "I apologize, but I couldn't generate a response at this time.";
+  } catch (error) {
+    console.error('AI API Error:', error);
+    return "I'm experiencing some technical difficulties right now. Please try again in a moment.";
+  }
+}
+
+export async function getAIStream(messages: Message[], model: AIModel, webSearchResults?: SearchResult[], youtubeVideos?: any[]) {
+  try {
+    const enhancedMessages = messages.map(msg => {
+      if (msg.role === 'user' && webSearchResults && webSearchResults.length > 0) {
+        return {
+          role: msg.role,
+          content: msg.content + "\n\n" + formatSearchResults(webSearchResults)
+        };
+      }
+      return {
+        role: msg.role,
+        content: msg.content
+      };
+    });
+
+    // Replace the direct a4fClient call with a fetch request to your API route
+    const response = await fetch('/api/ai', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model.apiModel,
+        messages: enhancedMessages,
+        stream: true, // Request streaming response
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to get AI stream');
+    }
+
+    // Return the stream directly to be handled by the calling component
+    return response.body;
+  } catch (error) {
+    console.error('AI API Stream Error:', error);
+    throw error; // Re-throw to be caught by the calling component
+  }
+}
+
 // You will need to modify the function that makes the API call.
 // For example, if you have a function like `callA4fApi`:
 

@@ -380,7 +380,7 @@ export async function editImage(imageFile: File, prompt: string): Promise<string
     }
     
     // If no URL found, try using the black-forest-labs-flux-1-kontext-max model with chat API
-    const chatResponse = await a4fClient.chat.completions.create({
+    const response = await fetch(`${a4fBaseUrl}/images/edits`, {
       model: "provider-6/black-forest-labs-flux-1-kontext-max",
       messages: [
         {

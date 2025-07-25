@@ -1,15 +1,6 @@
 import OpenAI from 'openai';
 at about others 
-// Remove these lines as the API key will now be handled server-side
-// const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
-// const a4fBaseUrl = 'https://api.a4f.co/v1';
 
-// Remove or comment out the direct OpenAI client initialization
-// const a4fClient = new OpenAI({
-//   apiKey: a4fApiKey,
-//   baseURL: a4fBaseUrl,
-//   dangerouslyAllowBrowser: true
-// });
 
 export async function speechToText(audioBlob: Blob): Promise<string> {
   try {

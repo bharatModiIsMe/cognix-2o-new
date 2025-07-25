@@ -20,20 +20,17 @@ export async function speechToText(audioBlob: Blob): Promise<string> {
     formData.append('file', audioBlob, 'audio.wav');
     formData.append('model', 'provider-2/whisper-1');
     formData.append('language', 'en');
+    formData.append('type', 'audioTranscription'); // Add type for server-side routing
 
-    // Update this fetch call to use your API route if you want to proxy it as well
-    // For now, keeping it direct as it uses formData which might be complex to proxy directly
-    // If you want to proxy this, you'd need a separate API route for audio transcriptions.
-    const response = await fetch(`https://api.a4f.co/v1/audio/transcriptions`, {
+    // Update this fetch call to use your API route
+    const response = await fetch('/api/ai', {
       method: 'POST',
-      headers: {
-        // 'Authorization': `Bearer ${a4fApiKey}`, // This will be handled by the server if proxied
-      },
-      body: formData
+      body: formData // FormData will be sent as multipart/form-data automatically
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorData = await response.json();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.message}`);
     }
 
     const result = await response.json();
@@ -57,12 +54,10 @@ export async function textToSpeech(text: string): Promise<ArrayBuffer> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        type: 'textToSpeech', // Indicate this is a TTS request
         model: "provider-3/tts-1", // Or the appropriate model for TTS
-        messages: [
-          { role: "user", content: text },
-        ],
-        // You might need to add a flag or endpoint to indicate this is a TTS request
-        // For example, a 'type: "tts"' field in the body, and handle it in api/ai.ts
+        input: text, // Send the text as 'input'
+        voice: "alloy", // Specify a voice, e.g., 'alloy', 'nova', 'shimmer', 'echo', 'fable', 'onyx'
       }),
     });
 
@@ -71,23 +66,11 @@ export async function textToSpeech(text: string): Promise<ArrayBuffer> {
       throw new Error(errorData.error || 'Failed to get TTS completion');
     }
 
-    const data = await response.json();
-    const audioUrl = data.choices[0]?.message?.content; // Assuming the API returns the audio URL
+    // The server will now return the audio stream directly, not a URL
+    const audioBlob = await response.blob();
+    const arrayBuffer = await audioBlob.arrayBuffer();
 
-    if (audioUrl && audioUrl.startsWith('http')) {
-      const audioResponse = await fetch(audioUrl);
-      if (audioResponse.ok) {
-        return await audioResponse.arrayBuffer();
-      }
-    }
-
-    // Fallback to browser's built-in speech synthesis
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      window.speechSynthesis.speak(utterance);
-    }
-    
-    return new ArrayBuffer(0);
+    return arrayBuffer;
   } catch (error) {
     console.error('Text to speech error:', error);
     

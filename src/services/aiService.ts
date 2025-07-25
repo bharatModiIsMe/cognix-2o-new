@@ -3,14 +3,16 @@ import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
 import { searchYouTubeVideos, shouldShowVideos } from './youtubeService';
 
-const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
-const a4fBaseUrl = 'https://api.a4f.co/v1';
+// Remove these lines as the API key will now be handled server-side
+// const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
+// const a4fBaseUrl = 'https://api.a4f.co/v1';
 
-const a4fClient = new OpenAI({
-  apiKey: a4fApiKey,
-  baseURL: a4fBaseUrl,
-  dangerouslyAllowBrowser: true
-});
+// Remove or comment out the direct OpenAI client initialization
+// const a4fClient = new OpenAI({
+//   apiKey: a4fApiKey,
+//   baseURL: a4fBaseUrl,
+//   dangerouslyAllowBrowser: true
+// });
 
 // Store user context for memory
 let userContext: { name?: string; preferences?: Record<string, any> } = {};
@@ -581,5 +583,32 @@ Always provide well-structured, formatted responses that are easy to read and un
   } catch (error) {
     console.error('AI API Stream Error:', error);
     yield { content: "I'm experiencing some technical difficulties right now. Please try again in a moment.", videos: [] };
+  }
+}
+
+// You will need to modify the function that makes the API call.
+// For example, if you have a function like `callA4fApi`:
+
+// Example of how to modify your API call function:
+export async function callA4fApi(messages: any[], model: string) {
+  try {
+    const response = await fetch('/api/ai', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ messages, model }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to fetch from API route');
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error calling API route:', error);
+    throw error;
   }
 }

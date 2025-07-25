@@ -3,16 +3,14 @@ import OpenAI from 'openai';
 import { googleSearch, formatSearchResults, SearchResult } from './googleSearchService';
 import { searchYouTubeVideos, shouldShowVideos } from './youtubeService';
 
-// Remove these lines as the API key will now be handled server-side
-// const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
-// const a4fBaseUrl = 'https://api.a4f.co/v1';
+const a4fApiKey = "ddc-a4f-2708604e0a7f47ecb013784c4aaeaf40";
+const a4fBaseUrl = 'https://api.a4f.co/v1';
 
-// Remove or comment out the direct OpenAI client initialization
-// const a4fClient = new OpenAI({
-//   apiKey: a4fApiKey,
-//   baseURL: a4fBaseUrl,
-//   dangerouslyAllowBrowser: true
-// });
+const a4fClient = new OpenAI({
+  apiKey: a4fApiKey,
+  baseURL: a4fBaseUrl,
+  dangerouslyAllowBrowser: true
+});
 
 // Store user context for memory
 let userContext: { name?: string; preferences?: Record<string, any> } = {};
@@ -237,100 +235,15 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-export async function getAICompletion(messages: Message[], model: AIModel, webSearchResults?: SearchResult[], youtubeVideos?: any[]) {
-  try {
-    const enhancedMessages = messages.map(msg => {
-      if (msg.role === 'user' && webSearchResults && webSearchResults.length > 0) {
-        return {
-          role: msg.role,
-          content: msg.content + "\n\n" + formatSearchResults(webSearchResults)
-        };
-      }
-      return {
-        role: msg.role,
-        content: msg.content
-      };
-    });
-
-    const response = await fetch('/api/ai', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        type: 'chatCompletion', // Indicate the type of request
-        model: model.apiModel,
-        messages: enhancedMessages,
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to get AI completion');
-    }
-
-    const data = await response.json();
-    return data.content || "I apologize, but I couldn't generate a response at this time.";
-  } catch (error) {
-    console.error('AI API Error:', error);
-    return "I'm experiencing some technical difficulties right now. Please try again in a moment.";
-  }
-}
-
-export async function getAIStream(messages: Message[], model: AIModel, webSearchResults?: SearchResult[], youtubeVideos?: any[]) {
-  try {
-    const enhancedMessages = messages.map(msg => {
-      if (msg.role === 'user' && webSearchResults && webSearchResults.length > 0) {
-        return {
-          role: msg.role,
-          content: msg.content + "\n\n" + formatSearchResults(webSearchResults)
-        };
-      }
-      return {
-        role: msg.role,
-        content: msg.content
-      };
-    });
-
-    const response = await fetch('/api/ai', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        type: 'chatCompletion', // Indicate the type of request
-        model: model.apiModel,
-        messages: enhancedMessages,
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to get AI stream');
-    }
-
-    return response.body;
-  } catch (error) {
-    console.error('AI API Stream Error:', error);
-    throw error;
-  }
-}
-
 export async function generateAIResponse(
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>, // Changed to match Message interface
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   modelId: string,
   images?: File[]
 ): Promise<string> {
   const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
 
   try {
+    // Convert images to base64 if provided
     const imageUrls: string[] = [];
     if (images && images.length > 0) {
       for (const image of images) {
@@ -339,8 +252,10 @@ export async function generateAIResponse(
       }
     }
 
+    // Prepare messages with images for all models
     const enhancedMessages = messages.map((msg, index) => {
       if (msg.role === 'user' && index === messages.length - 1 && imageUrls.length > 0) {
+        // Add images to the last user message for all models
         return {
           role: 'user' as const,
           content: [
@@ -358,26 +273,13 @@ export async function generateAIResponse(
       };
     });
 
-    const response = await fetch('/api/ai', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        type: 'chatCompletion', // Indicate the type of request
-        model: model.apiModel,
-        messages: enhancedMessages,
-        stream: false,
-      }),
+    const response = await a4fClient.chat.completions.create({
+      model: model.apiModel,
+      messages: enhancedMessages,
+      stream: false,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to generate AI response');
-    }
-
-    const data = await response.json();
-    return data.content || "I apologize, but I couldn't generate a response at this time.";
+    return response.choices[0]?.message?.content || "I apologize, but I couldn't generate a response at this time.";
   } catch (error) {
     console.error('AI API Error:', error);
     return "I'm experiencing some technical difficulties right now. Please try again in a moment.";
@@ -390,70 +292,294 @@ export async function generateImage(prompt: string, modelId: string): Promise<st
   try {
     console.log('Generating image with model:', imageModel.apiModel, 'prompt:', prompt);
     
-    const response = await fetch('/api/ai', {
+    // Use the A4F images endpoint instead of chat completions
+    const response = await fetch(`${a4fBaseUrl}/images/generations`, {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${a4fApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        type: 'imageGeneration', // Indicate the type of request
         model: imageModel.apiModel,
         prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+        quality: "standard",
+        response_format: "url"
       }),
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to generate image');
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const data = await response.json();
-    return data.url; // Assuming the API returns an object with a 'url' field
+    console.log('Image generation response:', data);
+
+    // Check for image URL in response
+    if (data.data && data.data[0] && data.data[0].url) {
+      console.log('Found image URL:', data.data[0].url);
+      return data.data[0].url;
+    }
+
+    // Check for b64_json format
+    if (data.data && data.data[0] && data.data[0].b64_json) {
+      console.log('Found base64 image');
+      return `data:image/png;base64,${data.data[0].b64_json}`;
+    }
+
+    // If no proper image data found, log the response structure
+    console.log('Unexpected response structure:', JSON.stringify(data, null, 2));
+    throw new Error('No image data found in response');
+    
   } catch (error) {
     console.error('Image generation error:', error);
-    return "I'm experiencing some technical difficulties generating the image right now. Please try again in a moment.";
+    throw new Error(`Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
-export async function editImage(prompt: string, modelId: string, imageUrl: string): Promise<string> {
-  const imageEditModel = IMAGE_EDIT_MODELS.find(m => m.id === modelId) || IMAGE_EDIT_MODELS[0];
-
+export async function editImage(imageFile: File, prompt: string): Promise<string> {
   try {
-    console.log('Editing image with model:', imageEditModel.apiModel, 'prompt:', prompt, 'image URL:', imageUrl);
-
-    const response = await fetch('/api/ai', {
+    console.log('Editing image with black-forest-labs-flux-1-kontext-max model, prompt:', prompt);
+    
+    // Get original image dimensions for aspect ratio preservation
+    const originalDimensions = await getImageDimensions(imageFile);
+    
+    // Convert image to base64
+    const base64Image = await fileToBase64(imageFile);
+    
+    // Create form data for image editing with enhanced parameters
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    formData.append('prompt', prompt);
+    formData.append('model', 'provider-6/black-forest-labs-flux-1-kontext-max');
+    formData.append('width', originalDimensions.width.toString());
+    formData.append('height', originalDimensions.height.toString());
+    formData.append('strength', '0.8'); // Higher strength for better quality
+    formData.append('guidance_scale', '7.5'); // Better guidance for quality
+    
+    // Use direct API call for image editing
+    const response = await fetch(`${a4fBaseUrl}/images/edits`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${a4fApiKey}`,
       },
-      body: JSON.stringify({
-        type: 'imageEdit', // Indicate the type of request
-        model: imageEditModel.apiModel,
-        prompt: prompt,
-        imageUrl: imageUrl,
-      }),
+      body: formData
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to edit image');
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json();
-    return data.url; // Assuming the API returns an object with a 'url' field
+    const result = await response.json();
+    
+    // Check for image URL in the response
+    if (result.data && result.data[0] && result.data[0].url) {
+      console.log('Found edited image URL:', result.data[0].url);
+      return result.data[0].url;
+    }
+    
+    // If no URL found, try using the black-forest-labs-flux-1-kontext-max model with chat API
+    const chatResponse = await a4fClient.chat.completions.create({
+      model: "provider-6/black-forest-labs-flux-1-kontext-max",
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { 
+              type: "text" as const, 
+              text: `${prompt}. Please maintain the original aspect ratio and dimensions (${originalDimensions.width}x${originalDimensions.height}). Ensure high quality output.` 
+            },
+            {
+              type: "image_url" as const,
+              image_url: { url: base64Image }
+            }
+          ]
+        }
+      ],
+      stream: false,
+    });
+
+    const content = chatResponse.choices[0]?.message?.content;
+    if (content) {
+      // Check for image URL in response
+      const urlMatch = content.match(/https?:\/\/[^\s)]+/);
+      if (urlMatch) {
+        console.log('Found edited image URL from chat API:', urlMatch[0]);
+        return urlMatch[0];
+      }
+      
+      // Check for base64 image
+      if (content.startsWith('data:image')) {
+        console.log('Found edited base64 image');
+        return content;
+      }
+    }
+
+    console.log('No image data found in response, returning original image');
+    return URL.createObjectURL(imageFile);
+    
   } catch (error) {
     console.error('Image editing error:', error);
-    return "I'm experiencing some technical difficulties editing the image right now. Please try again in a moment.";
+    throw new Error(`Failed to edit image: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
-export async function getYoutubeVideoSuggestions(query: string): Promise<any[]> {
-  if (!shouldShowVideos(query)) {
-    return [];
+// Helper function to get image dimensions
+function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+export async function* generateAIResponseStream(
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  modelId: string,
+  webMode: boolean = false,
+  isImageGeneration: boolean = false,
+  images?: File[]
+): AsyncGenerator<{ content: string; videos?: any[] }, void, unknown> {
+  const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
+
+  try {
+    // Check if we need to perform web search (automatically or via web mode)
+    let searchResults: SearchResult[] = [];
+    let enhancedMessages = [...messages];
+    let isWebSearchTriggered = false;
+    let youtubeVideos: any[] = [];
+    
+    const lastUserMessage = messages[messages.length - 1];
+    if (lastUserMessage?.role === 'user') {
+      // Check if query should show YouTube videos and get relevant videos
+      if (shouldShowVideos(lastUserMessage.content)) {
+        try {
+          // Extract more specific keywords for better video search
+          const searchQuery = extractVideoSearchKeywords(lastUserMessage.content);
+          youtubeVideos = await searchYouTubeVideos(searchQuery, 3);
+          console.log('Found YouTube videos:', youtubeVideos.length);
+        } catch (error) {
+          console.error('YouTube search failed:', error);
+        }
+      }
+
+      // Automatic detection or manual web mode
+      const shouldSearch = webMode || needsWebSearch(lastUserMessage.content);
+      
+      if (shouldSearch) {
+        try {
+          yield { content: "🔍 Searching the web for real-time information...\n\n", videos: youtubeVideos };
+          searchResults = await googleSearch(lastUserMessage.content);
+          if (searchResults.length > 0) {
+            isWebSearchTriggered = true;
+            const searchContext = formatSearchResults(searchResults);
+            enhancedMessages[enhancedMessages.length - 1] = {
+              ...lastUserMessage,
+              content: `${lastUserMessage.content}\n\n**Web Search Results:**\n${searchContext}\n\nPlease answer the user's question using the above search results. Present the information as if you knew it directly, highlighting key details with proper formatting. Use markdown to emphasize important data like prices, dates, and sources. If specific data isn't found, mention "No exact data found" and provide the most relevant available information. Never say you don't have real-time access - you do have access through these search results.`
+            };
+          } else {
+            yield { content: "No relevant search results found. Providing general information...\n\n", videos: youtubeVideos };
+          }
+        } catch (error) {
+          console.error('Web search failed:', error);
+          yield { content: "Web search temporarily unavailable. Providing general information...\n\n", videos: youtubeVideos };
+        }
+      }
+    }
+
+    // Convert images to base64 if provided
+    const imageUrls: string[] = [];
+    if (images && images.length > 0) {
+      for (const image of images) {
+        const base64 = await fileToBase64(image);
+        imageUrls.push(base64);
+      }
+    }
+
+    // Add images to the last user message if provided - works for all models
+    if (imageUrls.length > 0 && enhancedMessages.length > 0) {
+      const lastMessageIndex = enhancedMessages.length - 1;
+      const lastMessage = enhancedMessages[lastMessageIndex];
+      if (lastMessage.role === 'user') {
+        enhancedMessages[lastMessageIndex] = {
+          role: 'user',
+          content: [
+            { type: "text" as const, text: lastMessage.content },
+            ...imageUrls.map(url => ({
+              type: "image_url" as const,
+              image_url: { url }
+            }))
+          ] as any
+        };
+      }
+    }
+
+    // Extract user name from conversation for memory
+    const userName = userContext.name;
+    const nameFromMessages = enhancedMessages.find(msg => 
+      msg.role === 'user' && 
+      /my name is ([a-zA-Z]+)/i.test(msg.content)
+    )?.content.match(/my name is ([a-zA-Z]+)/i)?.[1];
+    
+    if (nameFromMessages && !userName) {
+      updateUserContext({ name: nameFromMessages });
+    }
+
+    // Enhanced system prompt with user context
+    const systemPrompt = `You are Cognix, an intelligent AI assistant with real-time web search capabilities, image understanding, and YouTube video recommendations.
+
+IMPORTANT: You have access to real-time information through web search results when provided. NEVER say "I don't have real-time access" or "I can't provide current information" - you can and do have access through search results.
+
+You can also see and analyze images that users upload. When users share images, describe what you see and help them with any questions about the images.
+
+${userName ? `USER CONTEXT: The user's name is ${userName}. Remember this information throughout the conversation.` : ''}
+
+${isWebSearchTriggered ? '🌐 **Web search was performed** - Use the provided search results to give accurate, current information. Present it naturally as if you knew it directly.' : ''}
+
+${youtubeVideos.length > 0 ? `📹 **YouTube videos found** - Relevant educational videos have been provided above your response. Reference these videos when appropriate in your answer.` : ''}
+
+Format your responses using markdown:
+- Use **bold** for important terms and emphasis
+- Use *italics* for subtle emphasis or definitions  
+- Use bullet points for lists
+- Use ### for headings
+- Include relevant emojis to make responses engaging
+- For prices, dates, and specific data, use formatting like **₹1,499** or **Released: March 2024**
+
+Always provide well-structured, formatted responses that are easy to read and understand.`;
+
+    const requestBody: any = {
+      model: model.apiModel,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...enhancedMessages
+      ],
+      stream: true,
+    };
+
+    const response = await a4fClient.chat.completions.create(requestBody) as any;
+
+    if (response[Symbol.asyncIterator]) {
+      // Streaming response
+      for await (const chunk of response) {
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) {
+          yield { content, videos: youtubeVideos };
+        }
+      }
+    } else {
+      // Non-streaming response
+      const content = response.choices[0]?.message?.content;
+      if (content) {
+        yield { content, videos: youtubeVideos };
+      }
+    }
+  } catch (error) {
+    console.error('AI API Stream Error:', error);
+    yield { content: "I'm experiencing some technical difficulties right now. Please try again in a moment.", videos: [] };
   }
-  const keywords = extractVideoSearchKeywords(query);
-  if (!keywords) {
-    return [];
-  }
-  return searchYouTubeVideos(keywords);
 }

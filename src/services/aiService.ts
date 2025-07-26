@@ -45,32 +45,32 @@ export const AI_MODELS: AIModel[] = [
     badge: "Web"
   },
   {
-    id: "deepseek-v3",
-    name: "DeepSeek V3",
+    id: "deepseek-r1-uncensored",
+    name: "DeepSeek R1 Uncensored",
     apiModel: "provider-6/deepseek-r1-uncensored",
-    description: "Advanced reasoning and coding capabilities",
-    badge: "Reasoning"
+    description: "DeepSeek R1 uncensored ,
+    badge: "Uncensored"
   },
   {
-    id: "gpt-4o",
-    name: "GPT-4o",
-    apiModel: "provider-6/gpt-4o",
-    description: "OpenAI's powerful multimodal model",
+    id: "cognix-deepresearch",
+    name: "Cognix-deepresearch",
+    apiModel: "provider-1/sonar-deep-research",
+    description: "Enhanced model by Cognix",
     badge: "Vision"
   },
   {
     id: "cognix-2o-reasoning",
     name: "Cognix-2o Reasoning",
-    apiModel: "provider-1/sonar-reasoning",
+    apiModel: "provider-1/sonar-reasoning-pro",
     description: "Advanced reasoning capabilities",
     badge: "Reasoning"
   },
   {
-    id: "gpt-4.1-mini",
-    name: "GPT-4.1 Mini",
+    id: "gpt-4.1,
+    name: "GPT-4.1-Advanced",
     apiModel: "provider-6/gpt-4.1-mini",
-    description: "Fast and efficient AI model",
-    badge: "Fast"
+    description: "Enhanced model by Cognix",
+    badge: "Fast and advvanced"
   }
 ];
 

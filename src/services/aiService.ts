@@ -48,15 +48,15 @@ export const AI_MODELS: AIModel[] = [
     id: "deepseek-r1-uncensored",
     name: "DeepSeek R1 Uncensored",
     apiModel: "provider-6/deepseek-r1-uncensored",
-    description: "DeepSeek R1 uncensored ,
-    badge: "Uncensored"
+    description: "DeepSeek R1 uncensored" ,
+    badge: "Model By deepseek"
   },
   {
     id: "cognix-deepresearch",
     name: "Cognix-deepresearch",
     apiModel: "provider-1/sonar-deep-research",
     description: "Enhanced model by Cognix",
-    badge: "Vision"
+    badge: "Deep research AI by (Claude-opus-4) enhanced by Cognix" 
   },
   {
     id: "cognix-2o-reasoning",
@@ -66,7 +66,7 @@ export const AI_MODELS: AIModel[] = [
     badge: "Reasoning"
   },
   {
-    id: "gpt-4.1,
+    id: "gpt-4.1-advanced",
     name: "GPT-4.1-Advanced",
     apiModel: "provider-6/gpt-4.1-mini",
     description: "Enhanced model by Cognix",
